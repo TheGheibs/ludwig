@@ -347,11 +347,11 @@ static int nernst_planck_update(psi_t * psi, double * fx, double * fy,
  *****************************************************************************/
 
 int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro, 
-			      map_t * map, colloids_info_t * cinfo) {
+			      map_t * map, colloids_info_t * cinfo, int print_current_flag, int timestep) {
 
   int nk;              /* Number of electrolyte species */
   int ia;
-
+  
   double ** flx = NULL;
 
   psi_nk(psi, &nk);
@@ -375,10 +375,174 @@ int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
   nernst_planck_fluxes_d3qx(psi, fe, hydro, map, cinfo, flx);
   
   /* Apply no-flux BC */
-  if (map) np_no_flux_boundary(psi, map, flx);
+  if (map) np_no_flux_boundary(psi, map, flx);  
 
   /* Update charges */
   nernst_planck_update_d3qx(psi, map, flx);
+
+//print_current_flag = 0;
+  if (print_current_flag == 1) {
+    
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    char filename[64];
+    char filename_p[64];
+    char filename_m[64];
+
+    char ts[10]; // 9 cifre + terminatore null
+    sprintf(ts, "%09d", timestep);
+    //sprintf(filename, "fluxes_%s.txt", ts);
+    sprintf(filename, "fluxes_%s-rank%04d.txt", ts, rank);
+    sprintf(filename_p, "fluxes_p_%s-rank%04d.txt", ts, rank);
+    sprintf(filename_m, "fluxes_m_%s-rank%04d.txt", ts, rank);
+
+    FILE *fp = fopen(filename, "w");
+    FILE *fp_m = fopen(filename_m, "w");
+    FILE *fp_p = fopen(filename_p, "w");
+
+    if (fp == NULL) {
+      perror("Errore nell'apertura del file flussi_correnti.dat");
+      exit(EXIT_FAILURE);
+    }
+
+    if (fp_m == NULL) {
+      perror("Errore nell'apertura del file flussi_correnti.dat");
+      exit(EXIT_FAILURE);
+    }
+
+    if (fp_p == NULL) {
+      perror("Errore nell'apertura del file flussi_correnti.dat");
+      exit(EXIT_FAILURE);
+    }
+
+    stencil_t * s = psi->stencil;
+    int nflux = s->npoints;
+    int nlocal[3], noffset[3];
+    cs_nlocal(psi->cs, nlocal);
+    cs_nlocal_offset(psi->cs, noffset);
+
+    for (int ic = 1; ic <= nlocal[X]; ic++) {
+      for (int jc = 1; jc <= nlocal[Y]; jc++) {
+        for (int kc = 1; kc <= nlocal[Z]; kc++) {
+          int index = cs_index(psi->cs, ic, jc, kc);
+          double jx = 0.0, jy = 0.0, jz = 0.0;
+          double jx_p = 0.0, jy_p = 0.0, jz_p = 0.0;
+          double jx_m = 0.0, jy_m = 0.0, jz_m = 0.0;
+
+
+          for (int n = 0; n < nk; n++) {
+            int valency = psi->valency[n];
+            int ia = addr_rank1(psi->nsites, nk, index, n);
+            for (int c = 1; c < nflux; c++) {
+              int8_t cx = s->cv[c][X];
+              int8_t cy = s->cv[c][Y];
+              int8_t cz = s->cv[c][Z];
+              double f = flx[ia][c - 1];
+              
+              jx += f * cx *  valency;
+              jy += f * cy *  valency;
+              jz += f * cz *  valency;
+
+              if (valency > 0) {
+                jx_p += f * cx *  valency;
+                jy_p += f * cy *  valency;
+                jz_p += f * cz *  valency;
+              }
+              else if (valency < 0) {
+                jx_m += f * cx *  valency;
+                jy_m += f * cy *  valency;
+                jz_m += f * cz *  valency;
+              }
+            }
+          }
+
+          int gx = ic + noffset[X];
+          int gy = jc + noffset[Y];
+          int gz = kc + noffset[Z];
+
+          fprintf(fp, "%d %d %d %.15e %.15e %.15e\n", gx, gy, gz, jx, jy, jz);
+          //fprintf(fp_p, "%d %d %d %.15e %.15e %.15e\n", gx, gy, gz, jx_p, jy_p, jz_p);
+          //fprintf(fp_m, "%d %d %d %.15e %.15e %.15e\n", gx, gy, gz, jx_m, jy_m, jz_m);
+          //fprintf(fp, " % .15e\n", jx);
+              
+        }
+      }
+    }
+
+
+  fclose(fp);
+  fclose(fp_m);
+  fclose(fp_p);
+  //printf("✅ Flussi salvati in flussi_correnti.txt\n");
+  /*
+  printf("---- Corrente elettrica (solo campo elettrico) ----\n");
+
+  double * __restrict__ psidata = psi->psi->data;
+  double * __restrict__ rhodata = psi->rho->data;
+  int nsites = psi->nsites;
+  double eunit, beta;
+  double reunit = 1.0/eunit;
+  double b0, b1;
+  double mu0, mu1;
+  double rho0, rho1;
+  double mu_s0, mu_s1;   // Solvation chemical potential, from free energy 
+  psi_unit_charge(psi, &eunit);
+  psi_beta(psi, &beta);
+  LB_RCS_TABLE(rcs);
+
+  for (int ic = 1; ic < nlocal[X]; ic++) {
+    for (int jc = 1; jc < nlocal[Y]; jc++) {
+      for (int kc = 1; kc < nlocal[Z]; kc++) {
+        //printf("Cell (%d, %d, %d):\n", ic, jc, kc);
+        int index = cs_index(psi->cs, ic, jc, kc);
+
+        double jx_elec = 0.0, jy_elec = 0.0, jz_elec = 0.0;
+
+        for (int n = 0; n < nk; n++) {
+          
+          double rho = rhodata[addr_rank1(nsites, nk, index, n)];
+          int valency = psi->valency[n];
+          double psi0 = psidata[addr_rank0(nsites, index)];
+          double D = psi->diffusivity[n];
+          double coeff = -D * rho * valency * eunit * beta;
+          fe->func->mu_solv(fe, index, n, &mu_s0);
+          mu0 = reunit*mu_s0 + psi->valency[n]*psidata[addr_rank0(nsites, index)];
+          rho0 = rhodata[addr_rank1(psi->nsites, nk, index, n)];
+        
+          for (int c = 1; c < nflux; c++) {
+            int8_t cx = s->cv[c][X];
+            int8_t cy = s->cv[c][Y];
+            int8_t cz = s->cv[c][Z];
+            int8_t pcv = cx*cx + cy*cy + cz*cz;
+
+            int index1 = cs_index(psi->cs, ic + cx, jc + cy, kc + cz);
+            fe->func->mu_solv(fe, index1, n, &mu_s1);
+            double psi1 = psidata[addr_rank0(nsites, index1)];
+            double grad_psi = (psi1 - psi0); ///attentooooooo
+            mu1 = reunit*mu_s1 + psi->valency[n]* psidata[addr_rank0(nsites, index1)];
+            b0 = exp(mu0 - mu1);
+            b1 = exp(mu1 - mu0);
+            rho1 = rhodata[addr_rank1(nsites, nk, index1, n)]*b1;
+
+            jx_elec =  - D*0.5*(1.0 + b0)*(rho1 - rho0)*rcs[pcv]; //+ coeff * grad_psi * cx
+            jy_elec =  - D*0.5*(1.0 + b0)*(rho1 - rho0)*rcs[pcv]; //+ coeff * grad_psi * cy
+            jz_elec =  - D*0.5*(1.0 + b0)*(rho1 - rho0)*rcs[pcv]; //+ coeff * grad_psi * cz
+
+            //printf("  Spec %d (%+d %+d %+d): rho=%.3e val=%+d D=%.2e dpsi=%.3e coeff=%.3e → jx=%.3e jy=%.3e jz=%.3e\n",
+            //n, cx, cy, cz, rho, valency, D, grad_psi, coeff, jx_elec, jy_elec, jz_elec);
+          }
+        }
+      }
+    }
+  }
+
+  */
+
+
+      
+
+  }
 
   for (ia = 0; ia < psi->nsites*nk; ia++) {
     free(flx[ia]);
@@ -386,6 +550,7 @@ int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
   free(flx);
 
   return 0;
+
 }
 
 /*****************************************************************************
@@ -446,47 +611,82 @@ static int nernst_planck_fluxes_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
     for (jc = 1; jc <= nlocal[Y]; jc++) {
       for (kc = 1; kc <= nlocal[Z]; kc++) {
 
-	index0 = cs_index(psi->cs, ic, jc, kc);
+		index0 = cs_index(psi->cs, ic, jc, kc);
         colloids_info_map(cinfo, index0, &pc);
 
-	if (pc) {
-	  continue;
-	}
-	else {
-	  stencil_t * s = psi->stencil;
-	  assert(s);
+        if (pc) {
+          continue;
+        }
+        else {
+          stencil_t * s = psi->stencil;
+          assert(s);
+          
+          /*
+          double jx_tot = 0.0;
+          double jy_tot = 0.0;
+          double jz_tot = 0.0;
+          double jx = 0.0;
+          double jy = 0.0;
+          double jz = 0.0;
+          double flux = 0.0;
+          */
+          
+          for (c = 1; c < s->npoints; c++) {
 
-	  for (c = 1; c < s->npoints; c++) {
+            int8_t cx  = s->cv[c][X];
+            int8_t cy  = s->cv[c][Y];
+            int8_t cz  = s->cv[c][Z];
+            int8_t pcv = cx*cx + cy*cy + cz*cz;
 
-	    int8_t cx  = s->cv[c][X];
-	    int8_t cy  = s->cv[c][Y];
-	    int8_t cz  = s->cv[c][Z];
-	    int8_t pcv = cx*cx + cy*cy + cz*cz;
+		    index1 = cs_index(psi->cs, ic + cx, jc + cy, kc + cz);
+		    map_status(map, index1, &status1);
 
-	    index1 = cs_index(psi->cs, ic + cx, jc + cy, kc + cz);
-	    map_status(map, index1, &status1);
+		    if (status1 == MAP_FLUID) {
 
-	    if (status1 == MAP_FLUID) {
+		      for (n = 0; n < nk; n++) {
 
-	      for (n = 0; n < nk; n++) {
+				fe->func->mu_solv(fe, index0, n, &mu_s0);
+				mu0 = reunit*mu_s0
+				  + psi->valency[n]*psidata[addr_rank0(psi->nsites, index0)];
+				rho0 = rhodata[addr_rank1(psi->nsites, nk, index0, n)];
 
-		fe->func->mu_solv(fe, index0, n, &mu_s0);
-		mu0 = reunit*mu_s0
-		  + psi->valency[n]*psidata[addr_rank0(psi->nsites, index0)];
-		rho0 = rhodata[addr_rank1(psi->nsites, nk, index0, n)];
+                fe->func->mu_solv(fe, index1, n, &mu_s1);
+                mu1 = reunit*mu_s1
+                  + psi->valency[n]* psidata[addr_rank0(psi->nsites, index1)];
+                b0 = exp(mu0 - mu1);
+                b1 = exp(mu1 - mu0);
+                rho1 = rhodata[addr_rank1(psi->nsites, nk, index1, n)]*b1;
 
-		fe->func->mu_solv(fe, index1, n, &mu_s1);
-		mu1 = reunit*mu_s1
-		  + psi->valency[n]* psidata[addr_rank0(psi->nsites, index1)];
-		b0 = exp(mu0 - mu1);
-		b1 = exp(mu1 - mu0);
-		rho1 = rhodata[addr_rank1(psi->nsites, nk, index1, n)]*b1;
+                flx[addr_rank1(psi->nsites, nk, index0, n)][c - 1]
+                  -= psi->diffusivity[n]*0.5*(1.0 + b0)*(rho1 - rho0)*rcs[pcv];
+                /*
+                  flux = flx[addr_rank1(psi->nsites, nk, index0, n)][c - 1];
+                jx_tot += flux * cx * psi->valency[n];
+                jy_tot += flux * cy * psi->valency[n];
+                jz_tot += flux * cz * psi->valency[n];
+                jx = flux * cx  * psi->valency[n];
+                jy = flux * cy * psi->valency[n];
+                jz = flux * cz * psi->valency[n];
+                double fattore = rho1 - rho0;
+                if (ic == 1 && jc == 10 && kc == 1) {
+                  printf("Processing cell (%d, %d, %d)\n", ic, jc, kc);
+                  printf("rho0: %.6e rho1: %.6e\n", rho0, rho1);
+                  printf("status0: %d status1: %d\n", status0, status1);
+                  printf("Valency: %d exp: %.6e fattore: %.6e dir (%+d %+d %+d): → jx=%.6e jy=%.6e \n",
+                  psi->valency[n], b1, fattore, cx, cy, cz, jx, jy);
+                }
+                
+                  //printf("rho0: %.6e cell (%d, %d, %d) \n", rho0, ic, jc, kc);
+                
 
-		flx[addr_rank1(psi->nsites, nk, index0, n)][c - 1]
-		  -= psi->diffusivity[n]*0.5*(1.0 + b0)*(rho1 - rho0)*rcs[pcv];
-	      }
-	    }
-	  }
+                
+                
+                */
+              }
+            }
+	  	  }
+          
+
         }
       }
     }
@@ -516,7 +716,7 @@ int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
   int ic, jc, kc; 
   int index0, index1;
   int nlocal[3];
-  int n, nk; /* Number of charged species */
+  int n, nk; // Number of charged species 
   int nsites;
   int c;
   int status1;
@@ -526,7 +726,7 @@ int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
   double b0, b1;
   double mu0, mu1;
   double rho0, rho1;
-  double mu_s0, mu_s1;   /* Solvation chemical potential, from free energy */
+  double mu_s0, mu_s1;   // Solvation chemical potential, from free energy /
   
   double rho_elec;
   double e[3];
@@ -560,120 +760,291 @@ int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
     for (jc = 1; jc <= nlocal[Y]; jc++) {
       for (kc = 1; kc <= nlocal[Z]; kc++) {
 
-	index0 = cs_index(psi->cs, ic, jc, kc);
+        index0 = cs_index(psi->cs, ic, jc, kc);
         colloids_info_map(cinfo, index0, &pc);
 
-	f[X] = 0.0;
-	f[Y] = 0.0;
-	f[Z] = 0.0;
+        f[X] = 0.0;
+        f[Y] = 0.0;
+        f[Z] = 0.0;
 
-	psi_rho_elec(psi, index0, &rho_elec);
+        psi_rho_elec(psi, index0, &rho_elec);
 
-	/* Total electrostatic force on colloid */
-	if (pc) {
+        // Total electrostatic force on colloid /
+        if (pc) {
 
-	  psi_electric_field(psi, index0, e);
+          psi_electric_field(psi, index0, e);
 
-	  f[X] = rho_elec * e[X] * dt;
-	  f[Y] = rho_elec * e[Y] * dt;
-	  f[Z] = rho_elec * e[Z] * dt;
+          f[X] = rho_elec * e[X] * dt;
+          f[Y] = rho_elec * e[Y] * dt;
+          f[Z] = rho_elec * e[Z] * dt;
 
-	  pc->force[X] += f[X];
-	  pc->force[Y] += f[Y];
-	  pc->force[Z] += f[Z];
+          pc->force[X] += f[X];
+          pc->force[Y] += f[Y];
+          pc->force[Z] += f[Z];
 
-	}
-	else {
-
-	  stencil_t * s = psi->stencil;
-	  /* Internal electrostatic force on fluid */
-	  for (c = 1; c < s->npoints; c++) {
-	    int8_t cx  = s->cv[c][X];
-	    int8_t cy  = s->cv[c][Y];
-	    int8_t cz  = s->cv[c][Z];
-	    int8_t pcv = cx*cx + cy*cy + cz*cz;
-
-	    index1 = cs_index(psi->cs, ic + cx, jc + cy, kc + cz);
-	    map_status(map, index1, &status1);
-
-	    if (status1 == MAP_FLUID) {
-
-	      for (n = 0; n < nk; n++) {
-		fe->func->mu_solv(fe, index0, n, &mu_s0);
-		mu0 = mu_s0
-		  + psi->valency[n]*eunit*psidata[addr_rank0(nsites, index0)];
-		rho0 = rhodata[addr_rank1(nsites, nk, index0, n)];
-
-		fe->func->mu_solv(fe, index1, n, &mu_s1);
-		mu1 = mu_s1
-		  + psi->valency[n]*eunit*psidata[addr_rank0(nsites, index1)];
-		b0 = exp(-beta*(mu1 - mu0));
-		b1 = exp(+beta*(mu1 - mu0));
-		rho1 = rhodata[addr_rank1(nsites, nk, index1, n)]*b1;
-
-		flxtmp[0] = - 0.5*(1.0 + b0)*(rho1 - rho0)*rcs[pcv];
-
-		/* Diffusive flux accumulated */
-		flx[addr_rank1(nsites, nk, index0, n)][c - 1] += psi->diffusivity[n]*flxtmp[0];
-
-		/* Force, including ideal gas part in chemical potential */
-		f[X] -= s->wgradients[c]*cx*flxtmp[0]*rbeta;
-		f[Y] -= s->wgradients[c]*cy*flxtmp[0]*rbeta;
-		f[Z] -= s->wgradients[c]*cz*flxtmp[0]*rbeta;
 	      }
-	    }
-	  }
+        else {
 
-	  /* Electrostatic force in external field */
+          stencil_t * s = psi->stencil;
+          // Internal electrostatic force on fluid 
+          for (c = 1; c < s->npoints; c++) {
+            int8_t cx  = s->cv[c][X];
+            int8_t cy  = s->cv[c][Y];
+            int8_t cz  = s->cv[c][Z];
+            int8_t pcv = cx*cx + cy*cy + cz*cz;
 
-	  f[X] *= dt;
-	  f[Y] *= dt;
-	  f[Z] *= dt;
+		    index1 = cs_index(psi->cs, ic + cx, jc + cy, kc + cz);
+		    map_status(map, index1, &status1);
 
-	  /* Count number of fluid sites */
-	  flocal[3] += 1.0;
+		    if (status1 == MAP_FLUID) {
+
+              for (n = 0; n < nk; n++) {
+                fe->func->mu_solv(fe, index0, n, &mu_s0);
+                mu0 = mu_s0
+                  + psi->valency[n]*eunit*psidata[addr_rank0(nsites, index0)];
+                rho0 = rhodata[addr_rank1(nsites, nk, index0, n)];
+
+                fe->func->mu_solv(fe, index1, n, &mu_s1);
+                mu1 = mu_s1
+                  + psi->valency[n]*eunit*psidata[addr_rank0(nsites, index1)];
+                b0 = exp(-beta*(mu1 - mu0));
+                b1 = exp(+beta*(mu1 - mu0));
+                rho1 = rhodata[addr_rank1(nsites, nk, index1, n)]*b1;
+
+                flxtmp[0] = - 0.5*(1.0 + b0)*(rho1 - rho0)*rcs[pcv];
+
+                // Diffusive flux accumulated 
+                flx[addr_rank1(nsites, nk, index0, n)][c - 1] += psi->diffusivity[n]*flxtmp[0];
+
+                // Force, including ideal gas part in chemical potential 
+                f[X] -= s->wgradients[c]*cx*flxtmp[0]*rbeta;
+                f[Y] -= s->wgradients[c]*cy*flxtmp[0]*rbeta;
+                f[Z] -= s->wgradients[c]*cz*flxtmp[0]*rbeta;
+              }
+            }
+          }
+
+          // Electrostatic force in external field /
+
+          f[X] *= dt;
+          f[Y] *= dt;
+          f[Z] *= dt;
+
+          // Count number of fluid sites 
+          flocal[3] += 1.0;
 
           if (hydro) hydro_f_local_add(hydro, index0, f);
 
         }   
 
-	/* Accumulate contribution to total force on system */ 
-	flocal[X] += f[X];
-	flocal[Y] += f[Y];
-	flocal[Z] += f[Z];
+        // Accumulate contribution to total force on system 
+        flocal[X] += f[X];
+        flocal[Y] += f[Y];
+        flocal[Z] += f[Z];
 
+        }
+      }
+    }
+
+    // On fluid sites apply correction for momentum conservation 
+
+    MPI_Allreduce(flocal, fsum, 4, MPI_DOUBLE, MPI_SUM, comm);
+  
+    fsum[X] /= fsum[3];
+    fsum[Y] /= fsum[3];
+    fsum[Z] /= fsum[3];
+
+    for (ic = 1; ic <= nlocal[X]; ic++) {
+      for (jc = 1; jc <= nlocal[Y]; jc++) {
+        for (kc = 1; kc <= nlocal[Z]; kc++) {
+
+          index0 = cs_index(psi->cs, ic, jc, kc);
+                colloids_info_map(cinfo, index0, &pc);
+
+          if (pc) continue;
+
+          f[X] = -fsum[X];
+          f[Y] = -fsum[Y];
+          f[Z] = -fsum[Z];
+
+          if (hydro) hydro_f_local_add(hydro, index0, f);
+        }
+      }
+    }
+
+  return 0;
+}
+
+/*
+int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro, 
+				    map_t * map, colloids_info_t * cinfo,
+				    double ** flx) {
+
+  int ic, jc, kc; 
+  int index0, index1;
+  int nlocal[3];
+  int n, nk;
+  int nsites;
+  int c;
+  int status0, status1;
+
+  double eunit;
+  double beta, rbeta;
+  double b0, b1;
+  double mu0, mu1;
+  double rho0, rho1;
+  double mu_s0, mu_s1;
+
+  double rho_elec;
+  double e[3];
+  double flocal[4] = {0.0, 0.0, 0.0, 0.0}, fsum[4], f[3]; 
+  double flxtmp;
+  double dt;
+
+  MPI_Comm comm;
+  colloid_t * pc = NULL;
+
+  double * __restrict__ psidata = psi->psi->data;
+  double * __restrict__ rhodata = psi->rho->data;
+
+  LB_RCS_TABLE(rcs);
+
+  assert(psi);
+  assert(fe);
+  assert(flx);
+
+  cs_nsites(psi->cs, &nsites);
+  cs_nlocal(psi->cs, nlocal);
+  cs_cart_comm(psi->cs, &comm);
+
+  int nx = nlocal[X];  // Per gestire le PBC in X
+
+  psi_nk(psi, &nk);
+  psi_unit_charge(psi, &eunit);
+  psi_beta(psi, &beta);
+  psi_multistep_timestep(psi, &dt);
+
+  rbeta = 1.0 / beta;
+
+  for (ic = 1; ic <= nx; ic++) {
+    for (jc = 1; jc <= nlocal[Y]; jc++) {
+      for (kc = 1; kc <= nlocal[Z]; kc++) {
+
+        index0 = cs_index(psi->cs, ic, jc, kc);
+        colloids_info_map(cinfo, index0, &pc);
+        map_status(map, index0, &status0);
+
+        f[X] = f[Y] = f[Z] = 0.0;
+
+        psi_rho_elec(psi, index0, &rho_elec);
+
+        if (pc) {
+          // Forza su colloide
+          psi_electric_field(psi, index0, e);
+          f[X] = rho_elec * e[X] * dt;
+          f[Y] = rho_elec * e[Y] * dt;
+          f[Z] = rho_elec * e[Z] * dt;
+
+          pc->force[X] += f[X];
+          pc->force[Y] += f[Y];
+          pc->force[Z] += f[Z];
+        }
+        else {
+          // Forza interna su fluido
+          stencil_t * s = psi->stencil;
+          for (c = 1; c < s->npoints; c++) {
+
+            int8_t cx  = s->cv[c][X];
+            int8_t cy  = s->cv[c][Y];
+            int8_t cz  = s->cv[c][Z];
+            int8_t pcv = cx*cx + cy*cy + cz*cz;
+
+            int ic1 = ic + cx;
+            int jc1 = jc + cy;
+            int kc1 = kc + cz;
+
+            index1 = cs_index(psi->cs, ic1, jc1, kc1);
+            map_status(map, index1, &status1);
+
+            // BLOCCO PBC X PER SOLIDO-SOLIDO
+            int block_force_pbc_x = 0;
+            if (status0 != MAP_FLUID && status1 != MAP_FLUID) {
+              if ((ic == 1 && ic1 == nx + 1) || (ic == nx && ic1 == 0)) {
+                block_force_pbc_x = 1;
+              }
+            }
+
+            if (block_force_pbc_x) continue;
+
+            for (n = 0; n < nk; n++) {
+              fe->func->mu_solv(fe, index0, n, &mu_s0);
+              mu0 = mu_s0 + psi->valency[n] * eunit * psidata[addr_rank0(nsites, index0)];
+              rho0 = rhodata[addr_rank1(nsites, nk, index0, n)];
+
+              fe->func->mu_solv(fe, index1, n, &mu_s1);
+              mu1 = mu_s1 + psi->valency[n] * eunit * psidata[addr_rank0(nsites, index1)];
+              b0 = exp(-beta * (mu1 - mu0));
+              b1 = exp(+beta * (mu1 - mu0));
+              rho1 = rhodata[addr_rank1(nsites, nk, index1, n)] * b1;
+
+              flxtmp = -0.5 * (1.0 + b0) * (rho1 - rho0) * rcs[pcv];
+
+              // Accumula flusso diffuso
+              flx[addr_rank1(nsites, nk, index0, n)][c - 1] += psi->diffusivity[n] * flxtmp;
+
+              // Contributo alla forza interna
+              f[X] -= s->wgradients[c] * cx * flxtmp * rbeta;
+              f[Y] -= s->wgradients[c] * cy * flxtmp * rbeta;
+              f[Z] -= s->wgradients[c] * cz * flxtmp * rbeta;
+            }
+          }
+
+          // Applica timestep e accumula forza
+          f[X] *= dt;
+          f[Y] *= dt;
+          f[Z] *= dt;
+
+          flocal[3] += 1.0;
+
+          if (hydro) hydro_f_local_add(hydro, index0, f);
+        }
+
+        // Somma forza totale per la correzione
+        flocal[X] += f[X];
+        flocal[Y] += f[Y];
+        flocal[Z] += f[Z];
       }
     }
   }
 
-  /* On fluid sites apply correction for momentum conservation */
-
+  // Correzione per conservazione della quantità di moto
   MPI_Allreduce(flocal, fsum, 4, MPI_DOUBLE, MPI_SUM, comm);
- 
+
   fsum[X] /= fsum[3];
   fsum[Y] /= fsum[3];
   fsum[Z] /= fsum[3];
 
-  for (ic = 1; ic <= nlocal[X]; ic++) {
+  for (ic = 1; ic <= nx; ic++) {
     for (jc = 1; jc <= nlocal[Y]; jc++) {
       for (kc = 1; kc <= nlocal[Z]; kc++) {
 
-	index0 = cs_index(psi->cs, ic, jc, kc);
+        index0 = cs_index(psi->cs, ic, jc, kc);
         colloids_info_map(cinfo, index0, &pc);
 
-	if (pc) continue;
+        if (pc) continue;
 
-	f[X] = -fsum[X];
-	f[Y] = -fsum[Y];
-	f[Z] = -fsum[Z];
+        f[X] = -fsum[X];
+        f[Y] = -fsum[Y];
+        f[Z] = -fsum[Z];
 
-	if (hydro) hydro_f_local_add(hydro, index0, f);
+        if (hydro) hydro_f_local_add(hydro, index0, f);
       }
     }
   }
 
   return 0;
 }
+*/
 
 /*****************************************************************************
  *
@@ -682,7 +1053,160 @@ int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
  *  Update the rho_k from the fluxes (D3QX stencil). Euler forward step.
  *
  *****************************************************************************/
+/*
+static int nernst_planck_update_d3qx(psi_t * psi, map_t * map, double ** flx) {
 
+  int ic, jc, kc, index;
+  int nsites;
+  int nlocal[3];
+  int n, nk;
+  int c;
+  int status;
+  double acc, maxacc = 0.0;
+  double dt;
+
+  const double rho_min = 1.0e-30; 
+
+  assert(psi);
+  assert(flx);
+
+  cs_nsites(psi->cs, &nsites);
+  cs_nlocal(psi->cs, nlocal);
+
+  psi_nk(psi, &nk);
+  psi_multistep_timestep(psi, &dt);
+
+  stencil_t * s = psi->stencil;
+  assert(s);
+
+  
+  double * corr = (double *) calloc((size_t) nsites*nk, sizeof(double));
+  if (corr == NULL) {
+    pe_fatal(psi->pe, "calloc(corr) failed in nernst_planck_update_d3qx\n");
+  }
+
+  
+  for (ic = 1; ic <= nlocal[X]; ic++) {
+    for (jc = 1; jc <= nlocal[Y]; jc++) {
+      for (kc = 1; kc <= nlocal[Z]; kc++) {
+
+        index = cs_index(psi->cs, ic, jc, kc);
+        map_status(map, index, &status);
+
+        if (status != MAP_FLUID) continue;
+
+        for (n = 0; n < nk; n++) {
+
+          double rho_old = psi->rho->data[addr_rank1(nsites, nk, index, n)];
+          double delta = 0.0;
+
+          for (c = 1; c < s->npoints; c++) {
+            delta += flx[addr_rank1(nsites, nk, index, n)][c - 1]*dt;
+          }
+
+          double rho_new = rho_old - delta;
+
+          if (rho_new >= rho_min || delta <= 0.0) {
+            psi->rho->data[addr_rank1(nsites, nk, index, n)] = (rho_new >= 0.0)
+                                                               ? rho_new
+                                                               : rho_min;
+          }
+          else {
+
+            double delta_target = rho_old - rho_min;
+            double scale = 0.0;
+
+            if (delta_target > 0.0 && delta > 0.0) {
+              scale = delta_target / delta;
+              if (scale < 0.0) scale = 0.0;
+              if (scale > 1.0) scale = 1.0;
+            }
+            else {
+              scale = 0.0;
+            }
+
+            for (c = 1; c < s->npoints; c++) {
+
+              int8_t cx = s->cv[c][X];
+              int8_t cy = s->cv[c][Y];
+              int8_t cz = s->cv[c][Z];
+
+              int index1 = cs_index(psi->cs, ic + cx, jc + cy, kc + cz);
+
+              double f_old = flx[addr_rank1(nsites, nk, index, n)][c - 1];
+              double f_new = f_old * scale;
+
+              flx[addr_rank1(nsites, nk, index, n)][c - 1] = f_new;
+
+              double d_old = f_old*dt;
+              double d_new = f_new*dt;
+              double removed = d_old - d_new; 
+
+              if (removed != 0.0) {
+                int status1;
+                map_status(map, index1, &status1);
+                if (status1 == MAP_FLUID) {
+                  /* Per conservare il bilancio sul link:
+                     vicino deve vedere +d_new invece di +d_old,
+                  corr[addr_rank1(nsites, nk, index1, n)] += (d_new - d_old);
+                }
+              }
+            }
+
+            double delta_scaled = 0.0;
+            for (c = 1; c < s->npoints; c++) {
+              delta_scaled += flx[addr_rank1(nsites, nk, index, n)][c - 1]*dt;
+            }
+            rho_new = rho_old - delta_scaled;
+
+            if (rho_new < rho_min) rho_new = rho_min;
+            psi->rho->data[addr_rank1(nsites, nk, index, n)] = rho_new;
+          }
+
+          acc = 0.0;
+          for (c = 1; c < s->npoints; c++) {
+            double d = flx[addr_rank1(nsites, nk, index, n)][c - 1]*dt;
+            acc += fabs(d);
+          }
+
+          if (psi->rho->data[addr_rank1(nsites, nk, index, n)] > 0.0) {
+            acc /= fabs(psi->rho->data[addr_rank1(nsites, nk, index, n)]);
+            if (maxacc < acc) maxacc = acc;
+          }
+        }
+      }
+    }
+  }
+
+  for (ic = 1; ic <= nlocal[X]; ic++) {
+    for (jc = 1; jc <= nlocal[Y]; jc++) {
+      for (kc = 1; kc <= nlocal[Z]; kc++) {
+
+        index = cs_index(psi->cs, ic, jc, kc);
+        map_status(map, index, &status);
+        if (status != MAP_FLUID) continue;
+
+        for (n = 0; n < nk; n++) {
+          double rho = psi->rho->data[addr_rank1(nsites, nk, index, n)];
+          double dcorr = corr[addr_rank1(nsites, nk, index, n)];
+
+          rho += dcorr;
+
+          if (rho < rho_min) rho = rho_min;
+
+          psi->rho->data[addr_rank1(nsites, nk, index, n)] = rho;
+        }
+      }
+    }
+  }
+
+  free(corr);
+
+  nernst_planck_maxacc_set(maxacc);
+
+  return 0;
+}
+*/
 static int nernst_planck_update_d3qx(psi_t * psi, map_t * map, double ** flx) {
 
   int ic, jc, kc, index;
@@ -693,6 +1217,8 @@ static int nernst_planck_update_d3qx(psi_t * psi, map_t * map, double ** flx) {
   int status;
   double acc, maxacc=0.0;
   double dt;
+
+  double flusso_tot = 0.0; // Per evitare warning 
 
   assert(psi);
   assert(flx);
@@ -707,29 +1233,34 @@ static int nernst_planck_update_d3qx(psi_t * psi, map_t * map, double ** flx) {
     for (jc = 1; jc <= nlocal[Y]; jc++) {
       for (kc = 1; kc <= nlocal[Z]; kc++) {
 
-	index = cs_index(psi->cs, ic, jc, kc);
+	    index = cs_index(psi->cs, ic, jc, kc);
         map_status(map, index, &status);
 
         if (status == MAP_FLUID) {
-	  stencil_t * s = psi->stencil;
-	  for (n = 0; n < nk; n++) {
+	  		stencil_t * s = psi->stencil;
+	  		for (n = 0; n < nk; n++) {
 
-	    acc = 0.0;
-	    for (c = 1; c < s->npoints; c++) {
-	      psi->rho->data[addr_rank1(nsites, nk, index, n)]
-		-= flx[addr_rank1(nsites, nk, index, n)][c - 1] * dt;
-	      acc += fabs(flx[addr_rank1(nsites, nk, index, n)][c - 1] * dt);
-	    }
+			    acc = 0.0;
+			    for (c = 1; c < s->npoints; c++) {
+			      psi->rho->data[addr_rank1(nsites, nk, index, n)]
+				-= flx[addr_rank1(nsites, nk, index, n)][c - 1] * dt;
+			      acc += fabs(flx[addr_rank1(nsites, nk, index, n)][c - 1] * dt);
+			    }
+          flusso_tot = acc; // Per evitare warning
+			    acc /= fabs(psi->rho->data[addr_rank1(nsites, nk, index, n)]);
+			    if (maxacc < acc) maxacc = acc;
+          if (ic ==9 && jc ==18 && kc ==1 && n ==0) {
+            //printf("Specie: %d Max acc: %.6e flusso_tot: %.6e densita: %.6e \n", n, maxacc, flusso_tot, psi->rho->data[addr_rank1(nsites, nk, index, n)]); // Per evitare warning
 
-	    acc /= fabs(psi->rho->data[addr_rank1(nsites, nk, index, n)]);
-	    if (maxacc < acc) maxacc = acc; 
-	  }
-	}
+          }
+          
+			  }
+		}
 
       }
     }
   }
-
+  
   nernst_planck_maxacc_set(maxacc);
 
   return 0;
@@ -874,7 +1405,15 @@ int np_advective_fluxes(psi_t * psi, hydro_t * hydro, double ** flx) {
 	  for (int n = 0; n < psi->nk; n++) {
 	    double rho0 = rho[addr_rank1(psi->nsites, psi->nk, index0, n)];
 	    double rho1 = rho[addr_rank1(psi->nsites, psi->nk, index1, n)];
-	    double flux = u*0.5*(rho0 + rho1);
+      double rho_face;
+      if (u > 0)
+        rho_face = rho0;   // upwind = nodo di partenza
+      else
+        rho_face = rho1;   // upwind = nodo di arrivo (se flusso inverso)
+      double rho_ARM = 2 * rho0 * rho1 / (rho0 + rho1 + 1e-55); // Avoid division by zero 
+	    //double flux = u*0.5*(rho0 + rho1);
+      //double flux = u*rho_ARM;
+      double flux = u*rho_face; // Upwind scheme
 	    flx[addr_rank1(psi->nsites, psi->nk, index0, n)][p-1] = flux;
 	  }
 	}
@@ -893,6 +1432,71 @@ int np_advective_fluxes(psi_t * psi, hydro_t * hydro, double ** flx) {
  *  Set normal fluxes at solid fluid interfaces to zero.
  *
  *****************************************************************************/
+/*
+int np_no_flux_boundary(psi_t * psi, map_t * map, double ** flx) {
+
+  int nlocal[3] = {0};
+  cs_t * cs = NULL;
+  stencil_t * s = NULL;
+
+  assert(psi);
+  assert(map);
+  assert(flx);
+
+  cs = psi->cs;
+  s  = psi->stencil;
+  assert(cs);
+  assert(s);
+
+  cs_nlocal(cs, nlocal);
+
+  for (int ic = 1; ic <= nlocal[X]; ic++) {
+    for (int jc = 1; jc <= nlocal[Y]; jc++) {
+      for (int kc = 1; kc <= nlocal[Z]; kc++) {
+
+        int index0 = cs_index(cs, ic, jc, kc);
+        int mask0  = 1;
+        int status0 = MAP_BOUNDARY;
+        map_status(map, index0, &status0);
+        mask0 = (status0 == MAP_FLUID);
+
+        for (int p = 1; p < s->npoints; p++) {
+
+          int8_t cx = s->cv[p][X];
+          int8_t cy = s->cv[p][Y];
+          int8_t cz = s->cv[p][Z];
+          int index1 = cs_index(cs, ic + cx, jc + cy, kc + cz);
+          int mask = 1;
+
+          /*
+          map_status(map, index1, &status);
+          mask = (status == MAP_FLUID);
+          mask = mask*mask0;
+
+          for (int n = 0;  n < psi->nk; n++) {
+            flx[addr_rank1(psi->nsites, psi->nk, index0, n)][p-1] *= mask;
+          }
+          //*
+          int status1 = MAP_FLUID;
+          map_status(map, index1, &status1);
+
+          // ❌ Blocca flusso SOLO se è tra liquido e solido (o viceversa)
+          int is_cross = ((status0 == MAP_FLUID && status1 != MAP_FLUID) ||
+                          (status1 == MAP_FLUID && status0 != MAP_FLUID));
+
+          if (is_cross) {
+            for (int n = 0; n < psi->nk; n++) {
+              flx[addr_rank1(psi->nsites, psi->nk, index0, n)][p-1] = 0.0;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+*/
 
 int np_no_flux_boundary(psi_t * psi, map_t * map, double ** flx) {
 
@@ -915,31 +1519,32 @@ int np_no_flux_boundary(psi_t * psi, map_t * map, double ** flx) {
     for (int jc = 1; jc <= nlocal[Y]; jc++) {
       for (int kc = 1; kc <= nlocal[Z]; kc++) {
 
-	int index0 = cs_index(cs, ic, jc, kc);
-	int mask0  = 1;
-	int status = MAP_BOUNDARY;
-	map_status(map, index0, &status);
-	mask0 = (status == MAP_FLUID);
+		int index0 = cs_index(cs, ic, jc, kc);
+		int mask0  = 1;
+		int status = MAP_BOUNDARY;
+		map_status(map, index0, &status);
+		mask0 = (status == MAP_FLUID);
 
-	for (int p = 1; p < s->npoints; p++) {
+        for (int p = 1; p < s->npoints; p++) {
 
-	  int8_t cx = s->cv[p][X];
-	  int8_t cy = s->cv[p][Y];
-	  int8_t cz = s->cv[p][Z];
-	  int index1 = cs_index(cs, ic + cx, jc + cy, kc + cz);
-	  int mask = 1;
+		  int8_t cx = s->cv[p][X];
+		  int8_t cy = s->cv[p][Y];
+		  int8_t cz = s->cv[p][Z];
+		  int index1 = cs_index(cs, ic + cx, jc + cy, kc + cz);
+		  int mask = 1;
 
-	  map_status(map, index1, &status);
-	  mask = (status == MAP_FLUID);
-	  mask = mask*mask0;
+		  map_status(map, index1, &status);
+		  mask = (status == MAP_FLUID);
+		  mask = mask*mask0;
 
-	  for (int n = 0;  n < psi->nk; n++) {
-	    flx[addr_rank1(psi->nsites, psi->nk, index0, n)][p-1] *= mask;
-	  }
-	}
+		  for (int n = 0;  n < psi->nk; n++) {
+		    flx[addr_rank1(psi->nsites, psi->nk, index0, n)][p-1] *= mask;
+		  }
+		}
       }
     }
   }
 
   return 0;
 }
+

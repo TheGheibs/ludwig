@@ -48,7 +48,7 @@ int psi_create(pe_t * pe, cs_t * cs, const psi_options_t * opts,
   return 0;
 
  err:
-  free(psi);
+  if (psi) free(psi);
   return -1;
 }
 
@@ -669,21 +669,21 @@ int psi_halo_psijump(psi_t * psi) {
 
     for (nh = 0; nh < nhalo; nh++) {
       for (jc = 1 - nhalo; jc <= nlocal[Y] + nhalo; jc++) {
-	for (kc = 1 - nhalo; kc <= nlocal[Z] + nhalo; kc++) {
+	      for (kc = 1 - nhalo; kc <= nlocal[Z] + nhalo; kc++) {
 
-	  index = cs_index(psi->cs, 0 - nh, jc, kc);
+          index = cs_index(psi->cs, 0 - nh, jc, kc);
 
-	  if (periodic[X]) {
-	    /* Add external potential */
-	    psidata[addr_rank0(psi->nsites, index)] += psi->e0[X]*ntotal[X];
-	  }
-	  else{
-	    /* Borrow fluid site ic = 1 */
-	    index1 = cs_index(psi->cs, 1, jc, kc);
-	    psidata[addr_rank0(psi->nsites, index)] =
-	      psidata[addr_rank0(psi->nsites, index1)];
-	  }
-	}
+          if (periodic[X]) {
+            /* Add external potential */
+            psidata[addr_rank0(psi->nsites, index)] += psi->e0[X]*ntotal[X];
+          }
+          else{
+            /* Borrow fluid site ic = 1 */
+            index1 = cs_index(psi->cs, 1, jc, kc);
+            psidata[addr_rank0(psi->nsites, index)] =
+              psidata[addr_rank0(psi->nsites, index1)];
+          }
+	      }
       }
     }
 
@@ -693,21 +693,21 @@ int psi_halo_psijump(psi_t * psi) {
 
     for (nh = 0; nh < nhalo; nh++) {
       for (jc = 1 - nhalo; jc <= nlocal[Y] + nhalo; jc++) {
-	for (kc = 1 - nhalo; kc <= nlocal[Z] + nhalo; kc++) {
+	      for (kc = 1 - nhalo; kc <= nlocal[Z] + nhalo; kc++) {
 
-	  index = cs_index(psi->cs, nlocal[0] + 1 + nh, jc, kc);
+          index = cs_index(psi->cs, nlocal[0] + 1 + nh, jc, kc);
 
-	  if (periodic[X]) {
-	    /* Subtract external potential */
-	    psidata[addr_rank0(psi->nsites, index)] -= psi->e0[X]*ntotal[X];
-	  }
-	  else {
-	    /* Borrow fluid site at end ... */
-	    index1 = cs_index(psi->cs, nlocal[X], jc, kc);
-	    psidata[addr_rank0(psi->nsites, index)] =
-	      psidata[addr_rank0(psi->nsites, index1)];
-	  }
-	}
+          if (periodic[X]) {
+            /* Subtract external potential */
+            psidata[addr_rank0(psi->nsites, index)] -= psi->e0[X]*ntotal[X];
+          }
+          else {
+            /* Borrow fluid site at end ... */
+            index1 = cs_index(psi->cs, nlocal[X], jc, kc);
+            psidata[addr_rank0(psi->nsites, index)] =
+              psidata[addr_rank0(psi->nsites, index1)];
+          }
+        }
       }
     }
   }

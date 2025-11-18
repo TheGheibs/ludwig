@@ -105,6 +105,7 @@
 #include "psi_solver.h"
 #include "psi_colloid.h"
 #include "nernst_planck.h"
+#include "psi_init.h"
 
 /* Statistics */
 #include "stats_colloid.h"
@@ -437,6 +438,12 @@ static int ludwig_rt(ludwig_t * ludwig) {
 
 void ludwig_run(const char * inputfile) {
 
+  int ATTIVA_MODALITA_V_t = 0; // 0 = no, 1 = yes
+  double jump_time_fraction = 1.0/6.0; // frazione di tempo in cui aggiornare il potenziale
+  int contatore_update_potenziale = 0; // non toccare
+  int evolution_flag = 0;
+  int numero_V_step_temporali = 2; // se ATTIVA_MODALITA_V_t = 1 => numero_V_step_temporali > 1
+
   char    filename[FILENAME_MAX];
   int     is_porous_media = 0;
   int     step = 0;
@@ -527,6 +534,29 @@ void ludwig_run(const char * inputfile) {
 
   while (physics_control_next_step(ludwig->phys)) {
 
+    //evolve potential map
+    if (ATTIVA_MODALITA_V_t == 1 && evolution_flag == 0){ 
+      if (numero_V_step_temporali == 2){
+        if (ludwig->tk.timestep >= (int) physics_control_ntimesteps(ludwig->phys) * jump_time_fraction) {
+          printf("Evolving potential map at timestep: %f\n", (int) physics_control_ntimesteps(ludwig->phys) * jump_time_fraction);
+          contatore_update_potenziale++;
+          psi_evolve_potential(ludwig->psi, ludwig->map, contatore_update_potenziale);
+          evolution_flag = 1;
+          //exit(0);
+        }
+      }
+      else if (numero_V_step_temporali != 2){
+        for (int i = 1; i < numero_V_step_temporali; i++){
+          if (ludwig->tk.timestep == physics_control_ntimesteps(ludwig->phys) * i / numero_V_step_temporali) {
+            printf("Evolving potential map at timestep: %d\n", physics_control_ntimesteps(ludwig->phys) * i / numero_V_step_temporali);
+            contatore_update_potenziale++;
+            psi_evolve_potential(ludwig->psi, ludwig->map, contatore_update_potenziale);
+            //exit(0);
+          }
+        }
+      }
+    }
+    
     TIMER_start(TIMER_STEPS);
 
     step = physics_control_timestep(ludwig->phys);
@@ -620,9 +650,7 @@ void ludwig_run(const char * inputfile) {
 	hydro_memcpy(ludwig->hydro, tdpMemcpyDeviceToHost);
       }
 
-
       /* Time splitting for high electrokinetic diffusions in Nernst Planck */
-
       psi_multisteps(ludwig->psi, &multisteps);
 
       for (im = 0; im < multisteps; im++) {
@@ -657,8 +685,17 @@ void ludwig_run(const char * inputfile) {
 	}
 
 	TIMER_start(TIMER_ELECTRO_NPEQ);
+  
+  int print_current_flag = 0;
+  
+  if ((ludwig->tk.timestep % ludwig->psi->psi->opts.iodata.iofreq) == 0){//physics_control_ntimesteps(ludwig->phys)-1) {
+    //printf("Printing current at timestep: %d\n", ludwig->tk.timestep);
+    print_current_flag = 1;
+  }
+  
 	nernst_planck_driver_d3qx(ludwig->psi, ludwig->fe, ludwig->hydro,
-				  ludwig->map, ludwig->collinfo);
+				  ludwig->map, ludwig->collinfo, print_current_flag, ludwig->tk.timestep);
+          print_current_flag = 0;
 	TIMER_stop(TIMER_ELECTRO_NPEQ);
 
       }

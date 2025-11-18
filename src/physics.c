@@ -666,3 +666,8 @@ __host__ int physics_control_init_time(physics_t * phys, int nstart, int nstep) 
 
   return 0;
 }
+
+__host__ __device__ int physics_control_ntimesteps(physics_t * phys) {
+  assert(phys);
+  return phys->nsteps;
+}

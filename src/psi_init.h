@@ -20,11 +20,18 @@
 #include "psi.h"
 #include "map.h"
 
+extern int *fixed_potential;
+extern int line_count;
+
 int psi_init_uniform(psi_t * obj, double rho_el);
 int psi_init_gouy_chapman(psi_t * obj, map_t * map, double rho_el,
 			      double sigma);
 int psi_init_liquid_junction(psi_t * obj, double rho_el, double delta_el);
 int psi_init_sigma(psi_t * obj, map_t * map);
+int psi_init_sigma_fixed_potential(psi_t * obj, map_t * map);
+int* read_map_file(const char *filename, int *line_count);
+char **read_evolution_file(const char *filename, int *line_count);
+int psi_evolve_potential(psi_t * psi, map_t * map, int contatore_update_potenziale);
 
 
 #endif 
