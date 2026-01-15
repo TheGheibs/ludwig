@@ -1,0 +1,18 @@
+{
+    "files.associations": {
+        "bit": "c",
+        "complex": "c",
+        "algorithm": "c",
+        "memory": "c",
+        "random": "c",
+        "initializer_list": "c",
+        "istream": "c",
+        "numeric": "c",
+        "ostream": "c",
+        "sstream": "c",
+        "streambuf": "c",
+        "array": "c",
+        "functional": "c",
+        "tuple": "c"
+    }
+}

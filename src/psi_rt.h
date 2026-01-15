@@ -14,6 +14,9 @@
 #ifndef LUDWIG_PSI_RT_H
 #define LUDWIG_PSI_RT_H
 
+extern double velocity_signal;
+extern double POTENTIAL;
+
 #include "pe.h"
 #include "runtime.h"
 #include "psi.h"

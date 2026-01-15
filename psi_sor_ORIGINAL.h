@@ -27,7 +27,6 @@ struct psi_solver_sor_s {
   var_epsilon_ft epsilon;                /* provides local epsilon */
 };
 
-//int* read_map_file(const char *filename, int *line_count); //// solo per potenziale fisso!!!
 int psi_solver_sor_create(psi_t * psi, psi_solver_sor_t ** sor);
 int psi_solver_sor_free(psi_solver_sor_t ** sor);
 int psi_solver_sor_solve(psi_solver_sor_t * sor, int ntimestep);

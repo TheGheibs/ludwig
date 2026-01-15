@@ -35,9 +35,9 @@
 /* Set the system size as desired. Clearly, this must match the system
  * set in the main input file for Ludwig. */
 
-const int xmax = 20;
+const int xmax = 80;
 const int ymax = 20;
-const int zmax = 20;
+const int zmax = 2;
 
 const int crystalline_cell_size = 10; /* Must divide all lengths */
 
@@ -47,7 +47,7 @@ const int crystalline_cell_size = 10; /* Must divide all lengths */
 enum {CIRCLE, SQUARE, XWALL, YWALL, ZWALL, XWALL_OBSTACLES, XWALL_BOTTOM,
       SPECIAL_CROSS, SIMPLE_CUBIC, BODY_CENTRED_CUBIC, FACE_CENTRED_CUBIC};
 
-const int xsection = XWALL;
+const int xsection = YWALL;
 
 /* "Obstacles": Modify the local geometry of the wall */
 
@@ -64,7 +64,7 @@ int obstacle_depth  = 6; /* perpendicular to length and height */
 
 enum {STATUS_ONLY, STATUS_WITH_C_H, STATUS_WITH_SIGMA,
       STATUS_WITH_H1_H2};
-const int output_type = STATUS_WITH_SIGMA;
+const int output_type = STATUS_ONLY;
 
 int map_special_cross(map_t * map);
 
@@ -126,7 +126,7 @@ int main(int argc, char ** argv) {
   case STATUS_WITH_SIGMA:
     /* Just a surface charge... */
     {
-      const double sigma0 = 0.125;
+      const double sigma0 = -0.2;
       ndata = 1;
       data[0] = sigma0;
       printf("Surface charge sigma = %f\n", sigma0);

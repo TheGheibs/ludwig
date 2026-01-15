@@ -22,7 +22,7 @@
 
 int nernst_planck_driver(psi_t * psi, fe_t * fe, map_t * map);
 int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
-			      map_t * map, colloids_info_t * cinfo, int print_current_flag, int timestep);
+			      map_t * map, colloids_info_t * cinfo, int print_current_flag);
 int nernst_planck_adjust_multistep(psi_t * psi);
 
 int nernst_planck_maxacc(double * acc);

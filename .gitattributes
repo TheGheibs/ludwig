@@ -2,3 +2,17 @@
 # See https://github.com/github/linguist
 
 *.h linguist-language=C
+# Forza LF per i file di script
+*.sh text eol=lf
+
+# Forza LF per i file di testo
+*.txt text eol=lf
+
+# Forza LF per i file di log
+*.log text eol=lf
+
+# Forza LF per i file di inp
+*.inp text eol=lf
+
+# Forza LF per i file di ogni tipo
+* text eol=lf

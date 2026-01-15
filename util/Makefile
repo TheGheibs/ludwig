@@ -40,6 +40,8 @@ build:
 	$(MAKE) coll_squ_subgrid_init
 	$(MAKE) multi_poly_init
 	$(MAKE) polarizer
+	$(MAKE) capillary2
+	$(MAKE) capillary2_ASCII
 
 colloid_init: colloid_init.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
@@ -64,13 +66,19 @@ multi_poly_init: multi_poly_init.o
 
 polarizer: polarizer.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	
+capillary2: capillary2.o
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+capillary2_ASCII: capillary2_ASCII.o
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	
 # Default rules
 
 .PHONY : clean
 clean:
 	rm -f *.o colloid_init extract_colloids capillary extract \
-	coll_squ_subgrid_init multi_poly_init polarizer
+	coll_squ_subgrid_init multi_poly_init polarizer capillary2
 	rm -f *gcda *gcno
 
 .SUFFIXES:

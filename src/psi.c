@@ -48,7 +48,7 @@ int psi_create(pe_t * pe, cs_t * cs, const psi_options_t * opts,
   return 0;
 
  err:
-  free(psi);
+  if (psi) free(psi);
   return -1;
 }
 

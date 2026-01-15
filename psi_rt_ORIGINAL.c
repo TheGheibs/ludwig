@@ -29,9 +29,6 @@
 #include "psi_init.h"
 #include "util_bits.h"
 
-double velocity_signal = 0.0;
-double POTENTIAL = 0.0;
-
 /*****************************************************************************
  *
  *  psi_rt_init_rho
@@ -47,7 +44,6 @@ double POTENTIAL = 0.0;
 int psi_rt_init_rho(pe_t * pe, rt_t * rt, psi_t * obj, map_t * map) {
 
   int n;
-  int pot;
   char value[BUFSIZ];
   char filestub[FILENAME_MAX];
 
@@ -57,7 +53,7 @@ int psi_rt_init_rho(pe_t * pe, rt_t * rt, psi_t * obj, map_t * map) {
   double ld;                  /* Debye length */
   double ld2;                 /* Second Debye length for dielectric contrast */
   double eps1, eps2;          /* Dielectric permittivities */
-  int t = 0;
+
   assert(pe);
   assert(rt);
 
@@ -187,187 +183,8 @@ int psi_rt_init_rho(pe_t * pe, rt_t * rt, psi_t * obj, map_t * map) {
     psi_init_sigma(obj,map);
   }
 
-  if (strcmp(value, "point_charges_fixed_potential") == 0) {
-
-    pe_info(pe, "Initial conditions:        %s\n", "Point or surface charges from file");
-
-    n = rt_double_parameter(rt, "electrokinetics_init_rho_el", &rho_el);
-    pot = rt_double_parameter(rt, "potential_init", &POTENTIAL);
-    if (n == 0) pe_fatal(pe, "... please set electrokinetics_init_rho_el\n");
-    if (pot == 0) pe_fatal(pe, "... please set potential value\n");
-    pe_info(pe, "Initial condition rho_el: %14.7e\n", rho_el);
-    psi_debye_length1(&opts, rho_el, &ld);
-    pe_info(pe, "Debye length:             %14.7e\n", ld);
-
-    /* Call permittivities and check for dielectric contrast */
-    psi_epsilon(obj, &eps1);
-    psi_epsilon2(obj, &eps2);
-
-    /* Unless really the same number... */
-    if (0 == util_double_same(eps1, eps2)) {
-      psi_debye_length1(&opts, rho_el, &ld2);
-      pe_info(pe, "Second Debye length:      %14.7e\n", ld2);
-    }
-    /* Set background charge densities */
-    psi_init_uniform(obj, rho_el);
-
-    /* Set surface charge */
-    n = rt_string_parameter(rt, "porous_media_file", filestub, FILENAME_MAX);
-    if (n == 0) pe_fatal(pe, " ... please provide porous media file\n");
-    pe_info(pe, "\nInitialisation of point or surface charges from file %s.001-001\n", filestub);
-    psi_init_sigma_fixed_potential(obj,map);
-  }
-
-  if (strcmp(value, "point_charges_fixed_potential_continuous") == 0) {
-
-    pe_info(pe, "Initial conditions:        %s\n", "Point or surface charges from file");
-    
-    n = rt_double_parameter(rt, "velocity_signal", &velocity_signal);
-    pe_info(pe, "Electric signal velocity: %14.7e\n", velocity_signal);
-    if (n == 0) pe_fatal(pe, "... please set velocity_signal\n");
-
-    pot = rt_double_parameter(rt, "potential_init", &POTENTIAL);
-    if (pot == 0) pe_fatal(pe, "... please set potential value\n");
-    
-    n = rt_double_parameter(rt, "electrokinetics_init_rho_el", &rho_el);
-    if (n == 0) pe_fatal(pe, "... please set electrokinetics_init_rho_el\n");
-    pe_info(pe, "Initial condition rho_el: %14.7e\n", rho_el);
-    psi_debye_length1(&opts, rho_el, &ld);
-    pe_info(pe, "Debye length:             %14.7e\n", ld);
-
-    /* Call permittivities and check for dielectric contrast */
-    psi_epsilon(obj, &eps1);
-    psi_epsilon2(obj, &eps2);
-
-    /* Unless really the same number... */
-    if (0 == util_double_same(eps1, eps2)) {
-      psi_debye_length1(&opts, rho_el, &ld2);
-      pe_info(pe, "Second Debye length:      %14.7e\n", ld2);
-    }
-    /* Set background charge densities */
-    psi_init_uniform(obj, rho_el);
-
-    /* Set surface charge */
-    n = rt_string_parameter(rt, "porous_media_file", filestub, FILENAME_MAX);
-    if (n == 0) pe_fatal(pe, " ... please provide porous media file\n");
-    pe_info(pe, "\nInitialisation of point or surface charges from file %s.001-001\n", filestub);
-    psi_evolve_potential_cont(obj,map,t);
-  }
-  
-  if (strcmp(value, "point_charges_fixed_potential_density_from_file") == 0) {
-
-    pe_info(pe, "Initial conditions:        %s\n", "Point or surface charges from file");
-    pe_info(pe, "Initialisation requested from file(s)\n");
-    
-    pot = rt_double_parameter(rt, "potential_init", &POTENTIAL);
-    if (pot == 0) pe_fatal(pe, "... please set potential value\n");
-    
-    io_event_t event1 = {0};
-    io_event_t event2 = {0};
-    pe_info(pe, "Initialisation requested from file(s)\n");
-    field_io_read(obj->psi, 0, &event1);
-    field_io_read(obj->rho, 0, &event2);
-  
-    /* Set surface charge */
-    n = rt_string_parameter(rt, "porous_media_file", filestub, FILENAME_MAX);
-    if (n == 0) pe_fatal(pe, " ... please provide porous media file\n");
-    pe_info(pe, "\nInitialisation of point or surface charges from file %s.001-001\n", filestub);
-    psi_init_sigma_fixed_potential(obj,map);
-  }
-
-  if (strcmp(value, "point_charges_fixed_potential_continuous_from_file") == 0) {
-
-    pe_info(pe, "Initial conditions:        %s\n", "Point or surface charges from file");
-    pe_info(pe, "Initialisation requested from file(s)\n");
-
-    pot = rt_double_parameter(rt, "potential_init", &POTENTIAL);
-    if (pot == 0) pe_fatal(pe, "... please set potential value\n");
-
-    n = rt_double_parameter(rt, "velocity_signal", &velocity_signal);
-    pe_info(pe, "Electric signal velocity: %14.7e\n", velocity_signal);
-    if (n == 0) pe_fatal(pe, "... please set velocity_signal\n");
-    
-    io_event_t event1 = {0};
-    io_event_t event2 = {0};
-    pe_info(pe, "Initialisation requested from file(s)\n");
-    field_io_read(obj->psi, 0, &event1);
-    field_io_read(obj->rho, 0, &event2);
-  
-    /* Set surface charge */
-    n = rt_string_parameter(rt, "porous_media_file", filestub, FILENAME_MAX);
-    if (n == 0) pe_fatal(pe, " ... please provide porous media file\n");
-    pe_info(pe, "\nInitialisation of point or surface charges from file %s.001-001\n", filestub);
-    psi_evolve_potential_cont(obj,map,t);
-  }
-
-  if (strcmp(value, "axon_mod") == 0) {
-
-  pe_info(pe, "Initial conditions:        %s\n",
-          "Point or surface charges from file");
-  pe_info(pe, "Initialisation requested from file(s)\n");
-
-  pot = rt_double_parameter(rt, "potential_init", &POTENTIAL);
-  if (pot == 0) pe_fatal(pe, "... please set potential value\n");
-
-  io_event_t event1 = {0};
-  io_event_t event2 = {0};
-  int ifail1 = 0;
-  int ifail2 = 0;
-  int n;
-  double rho_el = 0.0;
-  double ld, ld2;
-  double eps1, eps2;
-
-  /* Prova a leggere i file di restart */
-  ifail1 = field_io_read(obj->psi, 0, &event1);
-  ifail2 = field_io_read(obj->rho, 0, &event2);
-
-  if (ifail1 != 0 || ifail2 != 0) {
-    pe_info(pe,
-      "Restart fields (psi/rho) not found or error reading them.\n");
-    pe_info(pe,
-      "Falling back to uniform electrokinetic initialisation.\n");
-
-    /* Come nel ramo point_charges_fixed_potential */
-    n = rt_double_parameter(rt, "electrokinetics_init_rho_el", &rho_el);
-    if (n == 0) {
-      pe_fatal(pe, "... please set electrokinetics_init_rho_el\n");
-    }
-    pe_info(pe, "Initial condition rho_el: %14.7e\n", rho_el);
-
-    psi_debye_length1(&opts, rho_el, &ld);
-    pe_info(pe, "Debye length:             %14.7e\n", ld);
-
-    psi_epsilon(obj, &eps1);
-    psi_epsilon2(obj, &eps2);
-
-    if (0 == util_double_same(eps1, eps2)) {
-      psi_debye_length1(&opts, rho_el, &ld2);
-      pe_info(pe, "Second Debye length:      %14.7e\n", ld2);
-    }
-
-    /* Inizializza psi e rho uniformemente */
-    psi_init_uniform(obj, rho_el);
-  }
-  else {
-    pe_info(pe, "Restart fields psi/rho read successfully.\n");
-  }
-
-  /* In entrambi i casi, ora imposto le cariche da file di porosità */
-  n = rt_string_parameter(rt, "porous_media_file", filestub, FILENAME_MAX);
-  if (n == 0) pe_fatal(pe, " ... please provide porous media file\n");
-  pe_info(pe,
-    "\nInitialisation of point or surface charges from file %s.001-001\n",
-    filestub);
-
-  psi_init_axon(obj, map);
-}
-
-
   return 0;
 }
-
-
 
 /*****************************************************************************
  *

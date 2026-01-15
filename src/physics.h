@@ -54,5 +54,6 @@ __host__ __device__ int physics_fpulse(physics_t * phys, double fpulse[3]);
 __host__ __device__ int physics_fpulse_frequency(physics_t * phys,
 						  double * fpule_frequency);
 __host__ __device__ int physics_grad_mu(physics_t * phys, double gm[3]);
+__host__ __device__ int physics_control_ntimesteps(physics_t * phys);
 
 #endif
