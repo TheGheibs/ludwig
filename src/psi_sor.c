@@ -403,18 +403,18 @@ int psi_solver_sor_solve(psi_solver_sor_t * sor, int its) {
             //printf("counter: %d \n", counter);
 
 				//if (counter >= line_count) {
-				  //printf("Errore: counter %d supera line_count %d\n", counter, line_count);
-				  //exit(1);
+				//  printf("Errore: counter %d supera line_count %d\n", counter, line_count);
+				//  exit(1);
 				//}
 				
-				if (n == niteration - 1){
+				if (n == 0){
 					if (pass == 0){
-					//printf("pass 0 rank: %d counter: %d numero riga file: %d \n", rank, counter, fixed_potential[counter]);
-					//printf("checkpoint 1 counter: %d kst: %d \n", counter, kst);
+						//printf("pass 0 rank: %d counter: %d numero riga file: %d \n", rank, counter, fixed_potential[counter]);
+						//printf("checkpoint 1 counter: %d kst: %d \n", counter, kst);
 					}
 					if (pass == 1){
-					  //printf("pass 1 rank: %d counter: %d numero riga file: %d \n", rank, counter, fixed_potential[counter]);
-					  //printf("checkpoint 1 counter: %d kst: %d \n", counter, kst);
+						//printf("pass 1 rank: %d counter: %d numero riga file: %d \n", rank, counter, fixed_potential[counter]);
+						//printf("checkpoint 1 counter: %d kst: %d \n", counter, kst);
 					}
 				}
 				

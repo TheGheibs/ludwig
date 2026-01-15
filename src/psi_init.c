@@ -51,10 +51,6 @@ int psi_init_uniform(psi_t * obj, double rho_el) {
   cs_nlocal(obj->cs, nlocal);
   psi_nk(obj, &nk);
 
-  int ntotal[3];
-  cs_ntotal(obj->cs, ntotal);
-  fixed_potential = (int *) calloc(ntotal[X] * ntotal[Y] * ntotal[Z], sizeof(int));
-
   for (ic = 1; ic <= nlocal[X]; ic++) {
     for (jc = 1; jc <= nlocal[Y]; jc++) {
       for (kc = 1; kc <= nlocal[Z]; kc++) {
@@ -106,10 +102,6 @@ int psi_init_gouy_chapman(psi_t * obj, map_t * map, double rho_el,
   cs_ltot(obj->cs, ltot);
   cs_cartsz(obj->cs, mpi_cartsz);
   cs_cart_coords(obj->cs, mpi_cartcoords);
-
-  int ntotal[3];
-  cs_ntotal(obj->cs, ntotal);
-  fixed_potential = (int *) calloc(ntotal[X] * ntotal[Y] * ntotal[Z], sizeof(int));
 
   /* wall surface charge density */
   rho_w = sigma;
@@ -197,9 +189,6 @@ int psi_init_liquid_junction(psi_t * obj, double rho_el, double delta_el) {
   cs_ntotal(obj->cs, ntotal);
   cs_nlocal_offset(obj->cs, noff);
 
-  fixed_potential = (int *) calloc(ntotal[X] * ntotal[Y] * ntotal[Z], sizeof(int));
-
-
   /* Set electrolyte densities */
 
   for (ic = 1; ic <= nlocal[X]; ic++) {
@@ -249,9 +238,6 @@ int psi_init_sigma(psi_t * psi, map_t * map) {
 
   fixed_potential = (int *) calloc(ntotal[X] * ntotal[Y] * ntotal[Z], sizeof(int));
 
-  //for (int i = 0; i < ntotal[X] * ntotal[Y] * ntotal[Z]; i++) {
-    //printf("initialised fixed_potential[%d] = %d \n", i, fixed_potential[i]);
-  //}
 
   for (ic = 1; ic <= nlocal[X]; ic++) {
     for (jc = 1; jc <= nlocal[Y]; jc++) {
@@ -288,8 +274,6 @@ int psi_init_sigma_fixed_potential(psi_t * psi, map_t * map) {
   int mpi_cartsz[3];
   int mpicoords[3];
   int ntotal[3];
-
-  printf("Starting psi_init_sigma_fixed_potential \n");
 
   cs_cartsz(psi->cs, mpi_cartsz);
   cs_cart_coords(psi->cs, mpicoords);

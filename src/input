@@ -19,8 +19,9 @@ periodicity 1_1_1
 #  
 ##############################################################################
 viscosity 0.2
-isothermal_fluctuations off
-#force 0.00007_0_0
+lb_fluctuations off
+#force PRESSUREX_0_0
+#force 1e-11_0_0
 ##############################################################################
 #
 #  Free energy parameters

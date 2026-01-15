@@ -183,6 +183,53 @@ int psi_rt_init_rho(pe_t * pe, rt_t * rt, psi_t * obj, map_t * map) {
     psi_init_sigma(obj,map);
   }
 
+  if (strcmp(value, "point_charges_fixed_potential") == 0) {
+
+    pe_info(pe, "Initial conditions:        %s\n", "Point or surface charges from file");
+
+    n = rt_double_parameter(rt, "electrokinetics_init_rho_el", &rho_el);
+    if (n == 0) pe_fatal(pe, "... please set electrokinetics_init_rho_el\n");
+    pe_info(pe, "Initial condition rho_el: %14.7e\n", rho_el);
+    psi_debye_length1(&opts, rho_el, &ld);
+    pe_info(pe, "Debye length:             %14.7e\n", ld);
+
+    /* Call permittivities and check for dielectric contrast */
+    psi_epsilon(obj, &eps1);
+    psi_epsilon2(obj, &eps2);
+
+    /* Unless really the same number... */
+    if (0 == util_double_same(eps1, eps2)) {
+      psi_debye_length1(&opts, rho_el, &ld2);
+      pe_info(pe, "Second Debye length:      %14.7e\n", ld2);
+    }
+    /* Set background charge densities */
+    psi_init_uniform(obj, rho_el);
+
+    /* Set surface charge */
+    n = rt_string_parameter(rt, "porous_media_file", filestub, FILENAME_MAX);
+    if (n == 0) pe_fatal(pe, " ... please provide porous media file\n");
+    pe_info(pe, "\nInitialisation of point or surface charges from file %s.001-001\n", filestub);
+    psi_init_sigma_fixed_potential(obj,map);
+  }
+  
+  if (strcmp(value, "point_charges_fixed_potential_density_from_file") == 0) {
+
+    pe_info(pe, "Initial conditions:        %s\n", "Point or surface charges from file");
+    pe_info(pe, "Initialisation requested from file(s)\n");
+    
+    io_event_t event1 = {0};
+    io_event_t event2 = {0};
+    pe_info(pe, "Initialisation requested from file(s)\n");
+    field_io_read(obj->psi, 0, &event1);
+    field_io_read(obj->rho, 0, &event2);
+  
+    /* Set surface charge */
+    n = rt_string_parameter(rt, "porous_media_file", filestub, FILENAME_MAX);
+    if (n == 0) pe_fatal(pe, " ... please provide porous media file\n");
+    pe_info(pe, "\nInitialisation of point or surface charges from file %s.001-001\n", filestub);
+    psi_init_sigma_fixed_potential(obj,map);
+  }
+
   return 0;
 }
 
