@@ -440,19 +440,25 @@ int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
               int8_t cz = s->cv[c][Z];
               double f = flx[ia][c - 1];
               
-              jx += f * cx *  valency;
-              jy += f * cy *  valency;
-              jz += f * cz *  valency;
+              jx += f * cx *  valency / 2;
+              jy += f * cy *  valency / 2;
+              jz += f * cz *  valency / 2;
+
+              
 
               if (valency > 0) {
-                jx_p += f * cx *  valency;
-                jy_p += f * cy *  valency;
-                jz_p += f * cz *  valency;
+                jx_p += f * cx *  valency / 2;
+                jy_p += f * cy *  valency / 2;
+                jz_p += f * cz *  valency / 2;
+
+                //if (ic == 20 && jc == 10 && kc == 1){
+                //printf("f value: %.15e x=20;y=10;z=1 direction %d \n", f, cx);
+                //}
               }
               else if (valency < 0) {
-                jx_m += f * cx *  valency;
-                jy_m += f * cy *  valency;
-                jz_m += f * cz *  valency;
+                jx_m += f * cx *  valency / 2;
+                jy_m += f * cy *  valency / 2;
+                jz_m += f * cz *  valency / 2;
               }
             }
           }

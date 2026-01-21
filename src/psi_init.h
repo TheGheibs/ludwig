@@ -36,6 +36,7 @@ int psi_evolve_potential_shift(psi_t * psi, map_t * map);
 int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts);
 int psi_init_axon(psi_t * psi, map_t * map);
 int psi_axon_update(psi_t * psi, map_t * map, int ts);
+int electric_field_time_update(psi_t * psi, int ts);
 
 
 //Funzioni di servizio

@@ -143,7 +143,7 @@ int main(int argc, char ** argv) {
   /* SURFACE CHARGE */
   double sigma, fwall, fwallplus, fwallminus, sigmaplus, sigmaminus, w, l;
   zmax = 2;
-  xmax=256;
+  xmax=80;
   ymax=20;
   sigma=0.05;
   sigmaplus=0.05;

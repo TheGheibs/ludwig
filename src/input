@@ -27,9 +27,9 @@ isothermal_fluctuations off
 #
 ###############################################################################
 free_energy fe_electro
-electrokinetics_init    point_charges_fixed_potential_continuous_from_file #axon_mod ##_density_from_file
-velocity_signal         0.1
-potential_init          15.0
+electrokinetics_init    point_charges_fixed_potential #_continuous_from_file #axon_mod ##_density_from_file
+#velocity_signal         0.1
+potential_init          0.0
 electrokinetics_z0      +1
 electrokinetics_z1      -1
 electrokinetics_d0      0.0002

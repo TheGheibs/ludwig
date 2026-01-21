@@ -462,6 +462,8 @@ void ludwig_run(const char * inputfile) {
     exit(0);
   }
 
+  //MODALITA CAMPO ELETTRICO DIDPENDENTE DAL TEMPO
+  int ATTIVA_EF_t = 1; // 0 = no, 1 = yes
   
 
   char    filename[FILENAME_MAX];
@@ -617,6 +619,10 @@ void ludwig_run(const char * inputfile) {
 
     if (init_ek_axon == 1 /*&& ludwig->tk.timestep > 0*/){ 
       psi_axon_update(ludwig->psi, ludwig->map, ludwig->tk.timestep);
+    }
+
+    if (ATTIVA_EF_t == 1){
+      electric_field_time_update(ludwig->psi, ludwig->tk.timestep);
     }
 
     TIMER_start(TIMER_STEPS);

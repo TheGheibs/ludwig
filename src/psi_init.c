@@ -782,7 +782,7 @@ int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts) {
 //////////////////////////////////////////
 //
 //
-//  (c)ASSONE
+//  (C)ASSONE
 //
 //
 //////////////////////////////////////////
@@ -1116,6 +1116,17 @@ int psi_axon_update(psi_t * psi, map_t * map, int ts) {
       counter_axon = counter_axon + shift_y;
     }    
   } 
+
+  return 0;
+}
+
+
+int electric_field_time_update(psi_t * psi, int ts){
+
+  double e0 = 0.00000001*sqrt(ts + 1);
+  *psi->e0 = e0;
+
+  return 0;
 }
 
 //////////////////////////////////////////
