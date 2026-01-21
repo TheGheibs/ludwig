@@ -463,7 +463,10 @@ void ludwig_run(const char * inputfile) {
   }
 
   //MODALITA CAMPO ELETTRICO DIDPENDENTE DAL TEMPO
-  int ATTIVA_EF_t = 1; // 0 = no, 1 = yes
+  int ATTIVA_EF_t = 0; // 0 = no, 1 = yes
+  if (ATTIVA_EF_t == 1){
+    printf("TIME DEPENDENT ELECTRIC FIELD ACTIVATED \n");
+  }
   
 
   char    filename[FILENAME_MAX];
