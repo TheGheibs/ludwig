@@ -75,6 +75,7 @@
 #include "advection_bcs.h"
 #include "nernst_planck.h"
 #include "psi_gradients.h"
+#include "psi_init.h"
 
 /* This needs an input switch to make it active. */
 int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro, 
@@ -91,10 +92,12 @@ static int nernst_planck_fluxes_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
 		map_t * map, colloids_info_t * cinfo, double ** flx);
 static int nernst_planck_update_d3qx(psi_t * psi, 
 				map_t * map, double ** flx);
+
 static double max_acc; 
 
 int np_advective_fluxes(psi_t * psi, hydro_t * hydro, double ** flux);
 int np_no_flux_boundary(psi_t * psi, map_t * map, double ** flux);
+int ef_advective(psi_t * psi, double ** flx);
 
 /*****************************************************************************
  *
@@ -371,6 +374,8 @@ int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
   /* Add advective fluxes */
   if (hydro) np_advective_fluxes(psi, hydro, flx);
 
+  ef_advective(psi, flx);
+
   /* Add diffusive fluxes */
   nernst_planck_fluxes_d3qx(psi, fe, hydro, map, cinfo, flx);
   
@@ -383,29 +388,30 @@ int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
 //print_current_flag = 0;
   if (print_current_flag == 1) {
     
+	/*
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     char filename[64];
-    //char filename_p[64];
-    //char filename_m[64];
+    char filename_p[64];
+    char filename_m[64];
 
     char ts[10]; // 9 cifre + terminatore null
     sprintf(ts, "%09d", timestep);
     //sprintf(filename, "fluxes_%s.txt", ts);
     sprintf(filename, "fluxes_%s-rank%04d.txt", ts, rank);
-    //sprintf(filename_p, "fluxes_p_%s-rank%04d.txt", ts, rank);
-    //sprintf(filename_m, "fluxes_m_%s-rank%04d.txt", ts, rank);
+    sprintf(filename_p, "fluxes_p_%s-rank%04d.txt", ts, rank);
+    sprintf(filename_m, "fluxes_m_%s-rank%04d.txt", ts, rank);
 
     FILE *fp = fopen(filename, "w");
-    //FILE *fp_m = fopen(filename_m, "w");
-    //FILE *fp_p = fopen(filename_p, "w");
+    FILE *fp_m = fopen(filename_m, "w");
+    FILE *fp_p = fopen(filename_p, "w");
 
     if (fp == NULL) {
       perror("Errore nell'apertura del file flussi_correnti.dat");
       exit(EXIT_FAILURE);
     }
-    /*
+    ///*
     if (fp_m == NULL) {
       perror("Errore nell'apertura del file flussi_correnti.dat");
       exit(EXIT_FAILURE);
@@ -415,7 +421,7 @@ int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
       perror("Errore nell'apertura del file flussi_correnti.dat");
       exit(EXIT_FAILURE);
     }
-    */
+    
     stencil_t * s = psi->stencil;
     int nflux = s->npoints;
     int nlocal[3], noffset[3];
@@ -468,8 +474,8 @@ int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
           int gz = kc + noffset[Z];
 
           fprintf(fp, "%d %d %d %.15e %.15e %.15e\n", gx, gy, gz, jx, jy, jz);
-          //fprintf(fp_p, "%d %d %d %.15e %.15e %.15e\n", gx, gy, gz, jx_p, jy_p, jz_p);
-          //fprintf(fp_m, "%d %d %d %.15e %.15e %.15e\n", gx, gy, gz, jx_m, jy_m, jz_m);
+          fprintf(fp_p, "%d %d %d %.15e %.15e %.15e\n", gx, gy, gz, jx_p, jy_p, jz_p);
+          fprintf(fp_m, "%d %d %d %.15e %.15e %.15e\n", gx, gy, gz, jx_m, jy_m, jz_m);
           //fprintf(fp, " % .15e\n", jx);
               
         }
@@ -478,9 +484,10 @@ int nernst_planck_driver_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
 
 
   fclose(fp);
-  //fclose(fp_m);
-  //fclose(fp_p);
+  fclose(fp_m);
+  fclose(fp_p);
   //printf("✅ Flussi salvati in flussi_correnti.txt\n");
+  */
   /*
   printf("---- Corrente elettrica (solo campo elettrico) ----\n");
 
@@ -727,6 +734,8 @@ int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
   int c;
   int status1;
 
+  //exit(0);
+
   double eunit;
   double beta, rbeta;
   double b0, b1;
@@ -822,6 +831,7 @@ int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
                 // Diffusive flux accumulated 
                 flx[addr_rank1(nsites, nk, index0, n)][c - 1] += psi->diffusivity[n]*flxtmp[0];
 
+
                 // Force, including ideal gas part in chemical potential 
                 f[X] -= s->wgradients[c]*cx*flxtmp[0]*rbeta;
                 f[Y] -= s->wgradients[c]*cy*flxtmp[0]*rbeta;
@@ -829,6 +839,8 @@ int nernst_planck_fluxes_force_d3qx(psi_t * psi, fe_t * fe, hydro_t * hydro,
               }
             }
           }
+
+          //
 
           // Electrostatic force in external field /
 
@@ -1368,6 +1380,68 @@ int nernst_planck_adjust_multistep(psi_t * psi) {
  *  Symmetric two-point stencil.
  *
  *****************************************************************************/
+int ef_advective(psi_t * psi, double ** flx) {
+
+  int nlocal[3] = {0};
+  cs_t * cs = NULL;
+  stencil_t * s = NULL;
+
+  double * __restrict__ rho = psi->rho->data;
+
+  assert(psi);
+  assert(flx);
+
+  cs = psi->cs;
+  s = psi->stencil;
+  assert(cs);
+  assert(s);
+
+  cs_nlocal(cs, nlocal);
+
+  for (int ic = 1; ic <= nlocal[X]; ic++) {
+    for (int jc = 1; jc <= nlocal[Y]; jc++) {
+      for (int kc = 1; kc <= nlocal[Z]; kc++) {
+
+	      int index0 = cs_index(cs, ic, jc, kc);
+
+        double flux_0[3] = {0.0, 0.0, 0.0}; 
+        double flux_1[3] = {0.0, 0.0, 0.0}; 
+	
+
+        for (int p = 1; p < s->npoints; p++) {
+
+          int8_t cx = s->cv[p][X];
+          int8_t cy = s->cv[p][Y];
+          int8_t cz = s->cv[p][Z];
+          int index1 = cs_index(cs, ic + cx, jc + cy, kc + cz);
+          
+          
+
+          for (int n = 0; n < psi->nk; n++) {
+            double rho0 = rho[addr_rank1(psi->nsites, psi->nk, index0, n)];
+            double rho1 = rho[addr_rank1(psi->nsites, psi->nk, index1, n)];
+
+            flux_0[X] = rho0 * psi->valency[n] * psi->diffusivity[n] * ef_adv[X];
+            flux_0[Y] = rho0 * psi->valency[n] * psi->diffusivity[n] * ef_adv[Y];
+            flux_0[Z] = rho0 * psi->valency[n] * psi->diffusivity[n] * ef_adv[Z];
+            flux_1[X] = rho1 * psi->valency[n] * psi->diffusivity[n] * ef_adv[X];
+            flux_1[Y] = rho1 * psi->valency[n] * psi->diffusivity[n] * ef_adv[Y];
+            flux_1[Z] = rho1 * psi->valency[n] * psi->diffusivity[n] * ef_adv[Z];
+
+            double flux = 0.5*((flux_0[X]+flux_1[X])*cx + (flux_0[Y]+flux_1[Y])*cy + (flux_0[Z]+flux_1[Z])*cz);
+
+            flx[addr_rank1(psi->nsites, psi->nk, index0, n)][p-1] = flux;
+          }
+        }
+	/* Next site */
+      }
+    }
+  }
+
+  return 0;
+}
+
+
 
 int np_advective_fluxes(psi_t * psi, hydro_t * hydro, double ** flx) {
 
@@ -1417,9 +1491,9 @@ int np_advective_fluxes(psi_t * psi, hydro_t * hydro, double ** flx) {
       else
         rho_face = rho1;   // upwind = nodo di arrivo (se flusso inverso)
       //double rho_ARM = 2 * rho0 * rho1 / (rho0 + rho1 + 1e-55); // Avoid division by zero 
-	    double flux = u*0.5*(rho0 + rho1);
+	    //double flux = u*0.5*(rho0 + rho1);
       //double flux = u*rho_ARM;
-      //double flux = u*rho_face; // Upwind scheme
+      double flux = u*rho_face; // Upwind scheme
 	    flx[addr_rank1(psi->nsites, psi->nk, index0, n)][p-1] = flux;
 	  }
 	}

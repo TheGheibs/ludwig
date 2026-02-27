@@ -31,14 +31,18 @@ int line_count = 0;
 //POTENZIALE CONTINUO
 static double *mask0 = NULL;
 
+//ADVECTIVE EF
+double ef_adv[3] = {0.0, 0.0, 0.0};
+
+
 //ASSONE
 int *axon_patches = NULL;  //patchi dell'assone da filoe
 int *indices_patches_local = NULL; //indici dei patch nel dominio locale
 int *state_patches_local = NULL; //stato dei patch nel dominio locale
 int *timer_refractory_local = NULL; //cronometro nel dominio locale
 int *timer_active_local = NULL; //cronometro nel dominio locale
-int REFRACTORY_time = 50000; //tempo di refrattarietà
-int ACTIVE_time = 10000; //tempo di attività
+int REFRACTORY_time = 700; //tempo di refrattarietà
+int ACTIVE_time = 72; //tempo di attività
 
 int num_patches_local = 0;  //numero di patch nel dominio locale
 int line_count_axon = 0;
@@ -639,13 +643,14 @@ int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts) {
   int ntotal[3];
   int mpi_cartsz[3];
   int mpicoords[3];
+  int status;
 
   cs_nlocal(psi->cs, nlocal);
   cs_ntotal(psi->cs, ntotal);
   cs_cartsz(psi->cs, mpi_cartsz);
   cs_cart_coords(psi->cs, mpicoords);
 
-  int shift_z = ntotal[Z] * (mpi_cartsz[Z] - 1) / mpi_cartsz[Z]; //lo shift corretto credo sia ntotal[Z] * mpi_coords[Z] / mpi_cartsz[Z];
+  int shift_z = ntotal[Z] * (mpi_cartsz[Z] - 1) / mpi_cartsz[Z]; //
   int shift_y = ntotal[Y] * ntotal[Z] * (mpi_cartsz[Y] - 1) / mpi_cartsz[Y];
   int counter = mpicoords[X] * (ntotal[Y] * ntotal[Z]) * ntotal[X] / mpi_cartsz[X] + mpicoords[Y] * ntotal[Z] * ntotal[Y] / mpi_cartsz[Y] + mpicoords[Z] * ntotal[Z] / mpi_cartsz[Z];
 
@@ -667,7 +672,25 @@ int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts) {
       perror("Errore alloc mask0");
       return -1;
     }
+  }
+  double tau = 8.0 * 0.85 / 0.02; 
+  double t = (double) ts / tau;
 
+  for (int i = 0; i < ntotal[X]; i++) { //parte per potenziale rigido
+    if (t < 1){
+      //psi_X[i] = POTENTIAL;
+      psi_X[i] = POTENTIAL * (7.00672*t-5.94127*t*t);
+      //psi_X[i] = POTENTIAL * (70.6209*t-185.181*t*t+115.56*t*t*t); 
+      //psi_X[i] = POTENTIAL * (315.12*t-1551.52*t*t+2297.38*t*t*t-1059.98*t*t*t*t);
+      //psi_X[i] = POTENTIAL * (959.596*t-7254.27*t*t+18049.7*t*t*t-18367.9*t*t*t*t+6613.96*t*t*t*t*t);
+      //psi_X[i] = POTENTIAL * (2635.7*t-28032.4*t*t+102472*t*t*t-170201*t*t*t*t+132200*t*t*t*t*t-39073.4*t*t*t*t*t*t);
+    }
+    else if (t >= 1){
+      psi_X[i] = POTENTIAL;
+    }
+  }
+    //Questa è la parte per traslazione continua di una patch
+    /*
     int left_patch_border = 10; // ricordati che il vettore parte da 0
     int right_patch_border = 19; //cella destra della finestra iniziale
 
@@ -686,7 +709,31 @@ int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts) {
       printf("Patch initial Width: %d \n",
             right_patch_border - left_patch_border + 1);
     }
+    */
+  
+
+  //RIMUOVI STA PARTE FINO A GIU SE VUOI USARE CONTINUOUS MOVING PATCH 
+  
+  for (ic = 1; ic <= nlocal[X]; ic++) {
+    for (jc = 1; jc <= nlocal[Y]; jc++) {
+      for (kc = 1; kc <= nlocal[Z]; kc++) {
+        index = cs_index(psi->cs, ic, jc, kc);
+        map_status(map, index, &status);
+        idx = (ic - 1) + ntotal[X] / mpi_cartsz[X] * mpicoords[X];
+        if (fixed_potential[counter] != 0 && status != MAP_FLUID && jc >= nlocal[Y]-1) {
+          psi->psi->data[addr_rank0(psi->nsites, index)] = psi_X[idx];
+        }
+        else if (fixed_potential[counter] != 0 && status != MAP_FLUID && jc <= 2) {
+          psi->psi->data[addr_rank0(psi->nsites, index)] = -psi_X[idx];
+        }
+        counter++;
+        //printf("row: %d psi: %f \n", counter, psi->psi->data[addr_rank0(psi->nsites, index)]);
+      }	      
+      counter = counter + shift_z; 
+    }
+    counter = counter + shift_y; 
   }
+  //RIMUOVI STA PARTE FINO A SU SE VUOI USARE CONTINUOUS MOVING PATCH
 
   /*
   if (ts == 0){
@@ -699,11 +746,7 @@ int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts) {
         psi_X[i] = 0.0;
       }
     }
-    
   }
-  */
-  
-  /*
   //FUNZIONE POTENZIALE RIGIDO
   // spostamento in celle (approssimato a int) //
   int shift = (int) (velocity_signal * ts);
@@ -723,12 +766,7 @@ int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts) {
       psi_X[j] = 0.0; 
     }
   }
-  */
-
     // maschera "di base" a t = 0: 1 nella finestra, 0 fuori 
-
-   
-  
 
   // spostamento continuo in celle //
   double s = velocity_signal * (double) ts;   // può essere anche negativo //
@@ -771,6 +809,7 @@ int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts) {
     }
     counter = counter + shift_y; 
   }
+  */
   //exit(0);
 
   map_halo(map);
@@ -872,8 +911,23 @@ int psi_init_axon(psi_t * psi, map_t * map) {
         counter_local++;
          
         if (fixed_potential[counter] != 0){
-          psi->psi->data[addr_rank0(psi->nsites, index)] = 0.0;
-          counter++;  
+          if (fixed_potential[counter] == 1){
+            psi->psi->data[addr_rank0(psi->nsites, index)] = POTENTIAL;
+            counter++;
+          }
+          else if (fixed_potential[counter] == 2){
+            psi->psi->data[addr_rank0(psi->nsites, index)] = 0.0;
+            counter++;
+          }
+          else if (fixed_potential[counter] == -1){
+            psi->psi->data[addr_rank0(psi->nsites, index)] = -POTENTIAL;
+            counter++;
+          }
+          else{
+            printf("ERROR READING potential_map \n");
+	          exit(0);
+          }
+            
         } 
         else if (fixed_potential[counter] == 0){
           counter++;
@@ -1121,11 +1175,25 @@ int psi_axon_update(psi_t * psi, map_t * map, int ts) {
 }
 
 
-int electric_field_time_update(psi_t * psi, int ts){
+int electric_field_time_update(int ts){
 
-  double e0 = 0.00000001*sqrt(ts + 1);
-  *psi->e0 = e0;
-
+  double tau = 0.85 * 8.5 / 0.0002;
+  double t = ts / tau;
+  if (t < 1){
+    //ef_adv[X] = 0.0;
+    //ef_adv[X] = 0.11765;
+    //ef_adv[X] = 0.00011765 *(258827.0*t-2.10818e9*t*t+6.39132e12*t*t*t-9.17317e15*t*t*t*t+6.318e18*t*t*t*t*t-1.68577e21*t*t*t*t*t*t);
+	ef_adv[X] = 0.00000011765 *(7006.72*t-5.94127e6*t*t);
+    //ef_adv[X] = 0.125 * (7.17729*t-6.17729*t*t); 
+    //ef_adv[X] = 0.125 * (25.3915*t-57.568*t*t+33.1765*t*t*t); 
+    //ef_adv[X] = 0.125 * (65.5339*t-264.558*t*t+346.885*t*t*t-146.862*t*t*t*t);
+    //ef_adv[X] = 0.125 * (141.473*t-858.242*t*t+1850.5*t*t*t-1694.5*t*t*t*t+561.769*t*t*t*t*t);
+    //ef_adv[X] = 0.125 * (272.382*t-2259.58*t*t+6965.41*t*t*t-10156.8*t*t*t*t+7103.66*t*t*t*t*t-1924.03*t*t*t*t*t*t);
+  }
+  if (t >= 1){
+    ef_adv[X] = 0.11765;
+    //ef_adv[X] = 0.0;
+  }
   return 0;
 }
 

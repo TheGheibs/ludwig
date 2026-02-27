@@ -23,6 +23,8 @@
 extern int *fixed_potential;
 extern int line_count;
 
+extern double ef_adv[3];
+
 int psi_init_uniform(psi_t * obj, double rho_el);
 int psi_init_gouy_chapman(psi_t * obj, map_t * map, double rho_el,
 			      double sigma);
@@ -36,7 +38,7 @@ int psi_evolve_potential_shift(psi_t * psi, map_t * map);
 int psi_evolve_potential_cont(psi_t * psi, map_t * map, int ts);
 int psi_init_axon(psi_t * psi, map_t * map);
 int psi_axon_update(psi_t * psi, map_t * map, int ts);
-int electric_field_time_update(psi_t * psi, int ts);
+int electric_field_time_update(int ts);
 
 
 //Funzioni di servizio

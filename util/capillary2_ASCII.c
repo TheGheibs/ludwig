@@ -143,12 +143,12 @@ int main(int argc, char ** argv) {
   /* SURFACE CHARGE */
   double sigma, fwall, fwallplus, fwallminus, sigmaplus, sigmaminus, w, l;
   zmax = 2;
-  xmax=80;
-  ymax=20;
+  xmax=20;
+  ymax=68;
   sigma=0.05;
   sigmaplus=0.05;
   sigmaminus=-0.05;
-  w=16;
+  w=64;
   fwall=0.5;
     int opt;/*
     while ((opt = getopt(argc, argv, "l:w:y:p:m:f:")) != -1) {

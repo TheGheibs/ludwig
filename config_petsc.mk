@@ -16,7 +16,7 @@ CFLAGS  = -O2 -g -Wall
 
 AR      = ar                      # standard ar command
 ARFLAGS = -cru                    # flags for ar
-LDFLAGS =                         # additional link time flags
+LDFLAGS = -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib                      # additional link time flags
 
 MPI_INC_PATH      =  -I$(PETSC_DIR)/$(PETSC_ARCH)/include/             # path to mpi.h (if required)
 MPI_LIB_PATH      =  -L$(PETSC_DIR)/$(PETSC_ARCH)/lib/           # path to libmpi.a (if required)
@@ -26,4 +26,4 @@ LAUNCH_MPIRUN_CMD = mpirun -np 1
 
 HAVE_PETSC	=	true
 PETSC_INC = -I$(PETSC_DIR)/include/ -I$(PETSC_DIR)/$(PETSC_ARCH)/include/   
-PETSC_LIB =   -lpetsc #
+PETSC_LIB =   -L$(PETSC_DIR)/$(PETSC_ARCH)/lib/ -lpetsc  #
