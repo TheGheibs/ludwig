@@ -48,7 +48,7 @@ int psi_create(pe_t * pe, cs_t * cs, const psi_options_t * opts,
   return 0;
 
  err:
-  free(psi);
+  if (psi) free(psi);
   return -1;
 }
 
@@ -102,13 +102,17 @@ int psi_initialise(pe_t * pe, cs_t * cs, const psi_options_t * opts,
   psi->e0[Z] = opts->e0[Z];
 
   psi->diffusivity = (double *) calloc(opts->nk, sizeof(double));
+  psi->mobility_elec = (double *) calloc(opts->nk, sizeof(double));
   psi->valency = (int *) calloc(opts->nk, sizeof(int));
 
-  if (psi->diffusivity == NULL) pe_fatal(pe, "psi->diffusivity failed\n");
+  //if (psi->diffusivity == NULL) pe_fatal(pe, "psi->diffusivity failed\n");
+  if (psi->mobility_elec == NULL) pe_fatal(pe, "psi->mobility_elec failed\n");
   if (psi->valency == NULL) pe_fatal(pe, "calloc(psi->valency) failed\n");
 
   for (int n = 0; n < opts->nk; n++) {
     psi->diffusivity[n] = opts->diffusivity[n];
+    psi->mobility_elec[n] = opts->mobility_elec[n];
+
     psi->valency[n]     = opts->valency[n];
   }
 
@@ -153,6 +157,7 @@ int psi_finalise(psi_t * psi) {
 
   free(psi->valency);
   free(psi->diffusivity);
+  free(psi->mobility_elec);
 
   *psi = (psi_t) {0};
 
@@ -239,6 +244,23 @@ int psi_diffusivity(psi_t * obj, int n, double * diff) {
   assert(diff);
 
   *diff = obj->diffusivity[n];
+
+  return 0;
+}
+
+/*****************************************************************************
+ *
+ *  psi_mobility
+ *
+ *****************************************************************************/
+
+int psi_mobility_elec(psi_t * obj, int n, double * diff) {
+
+  assert(obj);
+  assert(n < obj->nk);
+  assert(diff);
+
+  *diff = obj->mobility_elec[n];
 
   return 0;
 }

@@ -105,6 +105,8 @@
 #include "psi_solver.h"
 #include "psi_colloid.h"
 #include "nernst_planck.h"
+#include "psi_init.h"
+#include "psi_sor.h"
 
 /* Statistics */
 #include "stats_colloid.h"
@@ -183,6 +185,9 @@ static int ludwig_report_momentum(ludwig_t * ludwig);
 static int ludwig_report_statistics(ludwig_t * ludwig, int itimestep);
 static int ludwig_colloids_update(ludwig_t * ludwig);
 static int ludwig_colloids_update_low_freq(ludwig_t * ludwig);
+static int init_ek_fixed_potential_continuos = 0;
+static int init_ek_axon = 0;
+
 
 int ludwig_timekeeper_init(ludwig_t * ludwig);
 int free_energy_init_rt(ludwig_t * ludwig);
@@ -286,9 +291,15 @@ static int ludwig_rt(ludwig_t * ludwig) {
     bbl_didt_method_set(ludwig->bbl, ellipsoid_didt);
   }
 
+  int seed = 0;
+
+  if (rt_int_parameter(rt, "random_seed", &seed) == 0) {
+    pe_fatal(pe, "random_seed non trovato nell'input\n");
+  }
+
   /* If any noise required ... */
   if (ludwig->lb->param->noise || (ludwig->pch && ludwig->pch->info.noise)) {
-    noise_options_t opts = noise_options_default();
+    noise_options_t opts = noise_options_seed(seed);
     noise_create(pe, cs, &opts, &ludwig->noise);
   }
 
@@ -437,6 +448,60 @@ static int ludwig_rt(ludwig_t * ludwig) {
 
 void ludwig_run(const char * inputfile) {
 
+  //MODALITA PATCH JUMPS ATTIVA
+  int ATTIVA_MODALITA_V_t = 0; // 0 = no, 1 = yes
+  double jump_time_fraction = 1.0/6.0; // frazione di tempo in cui aggiornare il potenziale
+  int contatore_update_potenziale = 0; // non toccare BRUTTO COGLIONE
+  int evolution_flag = 0;
+  int numero_V_step_temporali = 2; // se ATTIVA_MODALITA_V_t = 1 => numero_V_step_temporali > 1
+
+  //MODALITA PATCH SETTATA A FUNZIONE (da capire se funzia)
+  //int ATTIVA_MODALITA_V_t_continuous = 1; // 0 = no, 1 = yes
+  //int t_update_continuous = 1; // intervallo di tempo per aggiornare il potenziale
+
+  //MODALITA PATCH SHIFTATA
+  int ATTIVA_MODALITA_V_t_shift = 0; // 0 = no, 1 = yes
+  int t_update_shift = 1; // intervallo di tempo per aggiornare il potenziale
+
+  //controllo errori attivazione modalita
+  if (ATTIVA_MODALITA_V_t_shift /*+ ATTIVA_MODALITA_V_t_continuous*/ + ATTIVA_MODALITA_V_t > 1){
+    printf("Error: only one of the two modalities can be activated at the same time.\n");
+    exit(0);
+  }
+
+  //MODALITA CAMPO ELETTRICO DIDPENDENTE DAL TEMPO
+  int ATTIVA_EF_t = 1; // 0 = no, 1 = yes
+  if (ATTIVA_EF_t == 1){
+    printf("TIME DEPENDENT ELECTRIC FIELD ACTIVATED \n");
+  }
+
+  int ATTIVA_EF_periodic = 1; // 0 = no, 1 = yes 
+  // ATTENTO FORSE E MEGLIO TENERLO SEMPRE ON PERCHE SENNO CREA PETTINI 
+  if (ATTIVA_EF_periodic == 1){
+    printf("PERIODIC ELECTRIC FIELD ACTIVATED \n");
+  }
+
+
+  //FILTRO ENERGETICO MARCOTTE ET AL.
+  int ATTIVA_FILTRO_ENERGETICO = 0;
+  if (ATTIVA_FILTRO_ENERGETICO == 1){
+    printf("ENERGY FILTER ACTIVATED \n");
+  }
+
+  //ATTIVA CAMPO ELETTRICO ESTERNO.
+  int ATTIVA_EXT_PSI = 0;
+  if (ATTIVA_EXT_PSI == 1){
+    printf("ENERGY FILTER ACTIVATED \n");
+  }
+
+  //FLUTTUAZIONI TERMICHE SU IONI
+  int noise_ions_active = 1;
+  if (noise_ions_active == 1){
+    printf("FLUTTUAZIONI TERMICHE SU IONI ATTIVE \n");
+  }
+
+   
+
   char    filename[FILENAME_MAX];
   int     is_porous_media = 0;
   int     step = 0;
@@ -492,6 +557,66 @@ void ludwig_run(const char * inputfile) {
 
   ludwig_rt(ludwig);
 
+  {
+  char ek_init[BUFSIZ] = {0};
+
+  /* Legge lo stesso parametro usato in psi_rt_init_rho() */
+  rt_string_parameter(ludwig->rt, "electrokinetics_init", ek_init, BUFSIZ);
+
+  if (strcmp(ek_init, "point_charges_fixed_potential_continuous_from_file") == 0 ||
+      strcmp(ek_init, "point_charges_fixed_potential_continuous") == 0) {
+    init_ek_fixed_potential_continuos = 1;
+    } 
+  else {
+    init_ek_fixed_potential_continuos = 0;
+    }
+  }
+
+  {
+  char ek_init[BUFSIZ] = {0};
+
+  /* Legge lo stesso parametro usato in psi_rt_init_rho() */
+  rt_string_parameter(ludwig->rt, "electrokinetics_init", ek_init, BUFSIZ);
+
+  if (strcmp(ek_init, "axon_mod") == 0 ) {
+    init_ek_axon = 1;
+    } 
+  else {
+    init_ek_axon = 0;
+    }
+  }
+
+  /*
+  noise_t * noise_ions = NULL;W
+  if (noise_ions_active == 1) {
+    noise_options_t opts = noise_options_default();
+    noise_create(ludwig->pe, ludwig->cs, &opts, &noise_ions);
+  }
+  */
+
+  noise_t * noise_ions = NULL;
+
+  if (noise_ions_active == 1) {
+
+    int seed = 0;
+    int has_seed = 0;
+    int ion_seed = 0;
+
+    has_seed = rt_int_parameter(ludwig->rt, "random_seed", &seed);
+
+    if (has_seed == 0) {
+      pe_fatal(ludwig->pe, "random_seed non trovato nell'input\n");
+    }
+
+    ion_seed = seed + 7919;
+
+    pe_info(ludwig->pe, "Base random seed:      %d\n", seed);
+    pe_info(ludwig->pe, "Ion noise random seed: %d\n", ion_seed);
+
+    noise_create_seed(ludwig->pe, ludwig->cs, ion_seed, &noise_ions);
+  }
+
+
   statvel.print_vol_flux = rt_switch(ludwig->rt, "stats_vel_print_vol_flux");
 
   /* Report initial statistics */
@@ -525,7 +650,58 @@ void ludwig_run(const char * inputfile) {
   /* sync tasks before main loop for timing purposes */
   MPI_Barrier(comm);
 
+  if (ATTIVA_EF_periodic == 1){
+     electric_field_periodic(ludwig->psi);
+  }
+
+  if (ATTIVA_EXT_PSI == 1){
+    PSI_ext(ludwig->psi);
+  }
+
   while (physics_control_next_step(ludwig->phys)) {
+
+    //evolve potential map
+    if (ATTIVA_MODALITA_V_t == 1 && evolution_flag == 0){ 
+      if (numero_V_step_temporali == 2){
+        if (ludwig->tk.timestep >= (int) physics_control_ntimesteps(ludwig->phys) * jump_time_fraction) {
+          printf("Evolving potential map at timestep: %f\n", (int) physics_control_ntimesteps(ludwig->phys) * jump_time_fraction);
+          contatore_update_potenziale++;
+          psi_evolve_potential(ludwig->psi, ludwig->map, contatore_update_potenziale);
+          evolution_flag = 1;
+          //exit(0);
+        }
+      }
+      else if (numero_V_step_temporali != 2){
+        for (int i = 1; i < numero_V_step_temporali; i++){
+          if (ludwig->tk.timestep == physics_control_ntimesteps(ludwig->phys) * i / numero_V_step_temporali) {
+            printf("Evolving potential map at timestep: %d\n", physics_control_ntimesteps(ludwig->phys) * i / numero_V_step_temporali);
+            contatore_update_potenziale++;
+            psi_evolve_potential(ludwig->psi, ludwig->map, contatore_update_potenziale);
+            //exit(0);
+          }
+        }
+      }
+    }
+    
+    if (ATTIVA_MODALITA_V_t_shift == 1 && ludwig->tk.timestep % t_update_shift == 0 && ludwig->tk.timestep > 10){ 
+      psi_evolve_potential_shift(ludwig->psi, ludwig->map);
+    }
+
+    if (init_ek_fixed_potential_continuos == 1 /*&& ludwig->tk.timestep > 0*/){ 
+      psi_evolve_potential_cont(ludwig->psi, ludwig->map, ludwig->tk.timestep);
+    }
+
+    if (init_ek_axon == 1 /*&& ludwig->tk.timestep > 0*/){ 
+      psi_axon_update(ludwig->psi, ludwig->map, ludwig->tk.timestep);
+    }
+
+    if (ATTIVA_EF_t == 1){
+      electric_field_time_update(ludwig->tk.timestep);
+    }
+
+    if (ATTIVA_FILTRO_ENERGETICO == 1){
+      def_en_filter(ludwig->psi);
+    }
 
     TIMER_start(TIMER_STEPS);
 
@@ -608,6 +784,7 @@ void ludwig_run(const char * inputfile) {
       TIMER_start(TIMER_ELECTRO_POISSON);
 
       ludwig->poisson->impl->solve(ludwig->poisson, step);
+      
 
       TIMER_stop(TIMER_ELECTRO_POISSON);
 
@@ -620,9 +797,7 @@ void ludwig_run(const char * inputfile) {
 	hydro_memcpy(ludwig->hydro, tdpMemcpyDeviceToHost);
       }
 
-
       /* Time splitting for high electrokinetic diffusions in Nernst Planck */
-
       psi_multisteps(ludwig->psi, &multisteps);
 
       for (im = 0; im < multisteps; im++) {
@@ -633,12 +808,12 @@ void ludwig_run(const char * inputfile) {
 	psi_halo_rho(ludwig->psi);
 	TIMER_stop(TIMER_HALO_LATTICE);
 
+
 	/* Force calculation is only once per LB timestep */
 	if (im == 0) {
 
 	  TIMER_start(TIMER_FORCE_CALCULATION);
 	  psi_force_method(ludwig->psi, &flag);
-
           /* Force input as gradient of chemical potential
                  with integrated momentum correction       */
 	  if (flag == PSI_FORCE_GRADMU) {
@@ -646,19 +821,26 @@ void ludwig_run(const char * inputfile) {
 			     ludwig->hydro,
 			     ludwig->map, ludwig->collinfo);
 	  }
-
           /* Force calculation as divergence of stress tensor */
 	  if (flag == PSI_FORCE_DIVERGENCE) {
 	    psi_force_divstress(ludwig->psi, ludwig->fe, ludwig->hydro,
 				ludwig->collinfo);
 	  }
 	  TIMER_stop(TIMER_FORCE_CALCULATION);
-
 	}
 
 	TIMER_start(TIMER_ELECTRO_NPEQ);
+  
+  int print_current_flag = 0;
+  
+  if ((ludwig->tk.timestep % ludwig->psi->psi->opts.iodata.iofreq) == 0){//physics_control_ntimesteps(ludwig->phys)-1) {
+    //printf("Printing current at timestep: %d\n", ludwig->tk.timestep);
+    print_current_flag = 1;
+  }
+  
 	nernst_planck_driver_d3qx(ludwig->psi, ludwig->fe, ludwig->hydro,
-				  ludwig->map, ludwig->collinfo);
+				  ludwig->map, ludwig->collinfo, print_current_flag, ludwig->tk.timestep, noise_ions);
+          print_current_flag = 0;
 	TIMER_stop(TIMER_ELECTRO_NPEQ);
 
       }
@@ -677,7 +859,6 @@ void ludwig_run(const char * inputfile) {
       nernst_planck_adjust_multistep(ludwig->psi);
       psi_zero_mean(ludwig->psi);
     }
-
     /* order parameter dynamics (not if symmetric_lb) */
 
     if (ludwig->lb->ndist == 2) {
@@ -726,7 +907,6 @@ void ludwig_run(const char * inputfile) {
 	  if (ludwig->fe && ludwig->hydro && ludwig->fe->id == FE_TERNARY) {
             hydro_correct_momentum(ludwig->hydro);
 	  }
-
 	}
 	else {
 	  if (ludwig->pth->method == FE_FORCE_METHOD_STRESS_DIVERGENCE) {
@@ -780,7 +960,6 @@ void ludwig_run(const char * inputfile) {
 
       TIMER_stop(TIMER_ORDER_PARAMETER_UPDATE);
     }
-
     if (ludwig->hydro) {
 
       /* Zero velocity field here, as velocity at collision is used
@@ -1036,6 +1215,7 @@ void ludwig_run(const char * inputfile) {
   if (ludwig->noise_rho) noise_free(ludwig->noise_rho);
 #else
   if (ludwig->noise)     noise_free(&ludwig->noise);
+  if (noise_ions)        noise_free(&noise_ions);
 #endif
   if (ludwig->be)        beris_edw_free(ludwig->be);
   if (ludwig->map)       map_free(&ludwig->map);

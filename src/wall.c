@@ -720,6 +720,7 @@ __host__ int wall_link_slip(wall_t * wall, int n) {
   int s = WALL_NO_SLIP;
   int wn[3] = {0};
   int modwn = 0;
+  
 
   assert(wall);
   assert(0 <= n && n < wall->nlink);

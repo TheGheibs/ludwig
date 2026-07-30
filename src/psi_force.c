@@ -26,6 +26,8 @@
 #include "fe_electro_symmetric.h"
 #include "psi_force.h"
 #include "psi_gradients.h"
+#include "psi_init.h"
+#include "psi_sor.h"
 
 int psi_force_gradmu_e(psi_t * psi, fe_t * fe, hydro_t * hydro,
 		       colloids_info_t * cinfo);
@@ -106,45 +108,66 @@ int psi_force_gradmu_e(psi_t * psi, fe_t * fe, hydro_t * hydro,
   physics_kt(phys, &kt);
   psi_unit_charge(psi, &eunit);
   reunit = 1.0/eunit;
+  double force_adv[3];
+  double force_per[3];
 
   for (ic = 1; ic <= nlocal[X]; ic++) {
     for (jc = 1; jc <= nlocal[Y]; jc++) {
       for (kc = 1; kc <= nlocal[Z]; kc++) {
 
         index = cs_index(psi->cs, ic, jc, kc);
-	colloids_info_map(cinfo, index, &pc);
+	      colloids_info_map(cinfo, index, &pc);
 
-	/* Contribution from ionic electrostatic part
-           Note: The sum over the ionic species and the
-                 gradient of the electrostatic potential
-                 are implicitly calculated */
+        /* Contribution from ionic electrostatic part
+                Note: The sum over the ionic species and the
+                      gradient of the electrostatic potential
+                      are implicitly calculated */
 
-	psi_rho_elec(psi, index, &rho_elec);
-	psi_electric_field(psi, index, e);
+        psi_rho_elec(psi, index, &rho_elec);
+        psi_electric_field(psi, index, e);
 
-	for (ia = 0; ia < 3; ia++) {
-	  e[ia] *= kt*reunit;
-	  force[ia] = rho_elec*e[ia];
-	}
+        for (ia = 0; ia < 3; ia++) {
+          e[ia] *= kt*reunit;
+          force[ia] = rho_elec*e[ia];
+        }
 
-	/* If solid, accumulate contribution to colloid;
-	   otherwise to fluid node */
+         force_adv[X] = rho_elec * ef_adv[X] * reunit * kt;
+        force_adv[Y] = rho_elec * ef_adv[Y] * reunit * kt;
+        force_adv[Z] = rho_elec * ef_adv[Z] * reunit * kt;
 
-	if (pc) {
-	  pc->force[X] += force[X];
-	  pc->force[Y] += force[Y];
-	  pc->force[Z] += force[Z];
-	}
-	else {
-	  if (hydro) hydro_f_local_add(hydro, index, force);
-	  flocal[3] += 1.0;
-	}
+        force_per[X] = rho_elec * ef_per[ic-1] * reunit * kt;
+        force_per[Y] = 0.0;
+        force_per[Z] = 0.0;
+        //force_per[X] = 0.0;
 
-	/* Accumulate contribution to total force on system */
+        //printf("Force E_ADV[X]: %.15f vs ef[X]: %.15f \n", ef_adv[X], e[X]);
 
-	flocal[X] += force[X];
-	flocal[Y] += force[Y];
-	flocal[Z] += force[Z];
+        force[X] = force[X] + force_adv[X] + force_per[X];
+        force[Y] = force[Y] + force_adv[Y];
+        force[Z] = force[Z] + force_adv[Z];
+        /* If solid, accumulate contribution to colloid;
+          otherwise to fluid node */
+		  
+		//force[X] = 0.0;
+        //force[Y] = 0.0;
+        //force[Z] = 0.0;  
+		
+
+        if (pc) {
+          pc->force[X] += force[X];
+          pc->force[Y] += force[Y];
+          pc->force[Z] += force[Z];
+        }
+        else {
+          if (hydro) hydro_f_local_add(hydro, index, force);
+          flocal[3] += 1.0;
+        }
+
+        /* Accumulate contribution to total force on system */
+
+        flocal[X] += force[X];
+        flocal[Y] += force[Y];
+        flocal[Z] += force[Z];
 
       }
     }
